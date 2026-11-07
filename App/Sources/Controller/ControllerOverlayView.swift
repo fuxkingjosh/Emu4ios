@@ -263,7 +263,11 @@ enum ButtonRenderer {
         }
     }
 
-    static func draw(_ spec: ButtonSpec, in r: CGRect, pressedMask: UInt32?, context ctx: CGContext) {
+    /// `scale` shrinks labels and borders for small previews (1 = real size).
+    static func draw(_ spec: ButtonSpec, in r: CGRect, pressedMask: UInt32?, context ctx: CGContext, scale: CGFloat = 1) {
+        var spec = spec
+        spec.labelSize *= scale
+        spec.borderWidth *= scale
         ctx.saveGState()
         ctx.setAlpha(spec.opacity)
         if spec.input == .dpad {

@@ -35,7 +35,12 @@ final class PhysicalInput: ObservableObject {
 
     private func refresh() {
         let pad = GCController.controllers().first { $0.extendedGamepad != nil }
+        #if targetEnvironment(simulator)
+        // The Simulator always reports a virtual controller; keep touch controls visible there.
+        controllerConnected = false
+        #else
         controllerConnected = pad != nil
+        #endif
         controllerName = pad?.vendorName
         guard let gamepad = pad?.extendedGamepad else { return }
         gamepad.valueChangedHandler = { [weak self] gamepad, _ in

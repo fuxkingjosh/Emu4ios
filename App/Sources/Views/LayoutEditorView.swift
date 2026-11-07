@@ -128,7 +128,9 @@ struct LayoutEditorView: View {
         return Canvas { ctx, canvasSize in
             ctx.withCGContext { cg in
                 UIGraphicsPushContext(cg)
-                ButtonRenderer.draw(spec, in: CGRect(origin: .zero, size: canvasSize), pressedMask: selected ? 0 : nil, context: cg)
+                ButtonRenderer.draw(spec, in: CGRect(origin: .zero, size: canvasSize), pressedMask: selected ? 0 : nil, context: cg,
+                                    scale: size.width / (landscape ? max(UIScreen.main.bounds.width, UIScreen.main.bounds.height)
+                                                                   : min(UIScreen.main.bounds.width, UIScreen.main.bounds.height)))
                 UIGraphicsPopContext()
             }
         }

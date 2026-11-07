@@ -151,7 +151,8 @@ struct ThemePreviewCard: View {
                     ctx.withCGContext { cg in
                         UIGraphicsPushContext(cg)
                         for spec in layout.buttons where !spec.hidden {
-                            ButtonRenderer.draw(spec, in: spec.frame.rect(in: size), pressedMask: nil, context: cg)
+                            ButtonRenderer.draw(spec, in: spec.frame.rect(in: size), pressedMask: nil, context: cg,
+                                                scale: size.width / 393)
                         }
                         UIGraphicsPopContext()
                     }
