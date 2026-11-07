@@ -40,8 +40,21 @@ final class AppRouter: ObservableObject {
                 do { incomingTheme = try ThemeSharing.theme(fromLink: url) }
                 catch { errorMessage = error.localizedDescription }
             case "play":
-                let id = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "id" }?.value
-                if let id, let game = library.game(id: id) { play(game) }
+                let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+                let id = items.first { $0.name == "id" }?.value
+                let file = items.first { $0.name == "file" }?.value
+                library.scanForNewFiles()
+                if let game = id.flatMap(library.game(id:)) ?? library.games.first(where: { $0.fileName == file }) {
+                    play(game)
+                }
+            case "tab":
+                let name = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "name" }?.value
+                switch name {
+                case "themes": selectedTab = .themes
+                case "stats": selectedTab = .stats
+                case "settings": selectedTab = .settings
+                default: selectedTab = .library
+                }
             default:
                 break
             }
