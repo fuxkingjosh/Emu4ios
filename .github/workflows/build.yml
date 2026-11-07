@@ -87,12 +87,16 @@ jobs:
             xcrun simctl spawn "$DEVICE" defaults write $BID activeThemeID "$theme"
             xcrun simctl spawn "$DEVICE" defaults write $BID autoResume -bool NO
             xcrun simctl launch "$DEVICE" $BID; shoot "library-$name" 6
-            xcrun simctl openurl "$DEVICE" "emu4ios://play?file=E4%20Demo.gba"; shoot "game-$name" 5
+            xcrun simctl terminate "$DEVICE" $BID || true
+            xcrun simctl launch "$DEVICE" $BID -E4AutoPlay "E4 Demo.gba"; shoot "game-$name" 7
           done
           xcrun simctl terminate "$DEVICE" $BID || true
           xcrun simctl spawn "$DEVICE" defaults write $BID activeThemeID builtin.midnight
-          xcrun simctl launch "$DEVICE" $BID; sleep 4
-          xcrun simctl openurl "$DEVICE" "emu4ios://tab?name=themes"; shoot "themes" 4
+          xcrun simctl launch "$DEVICE" $BID -E4StartTab themes; shoot "themes" 6
+          xcrun simctl terminate "$DEVICE" $BID || true
+          xcrun simctl launch "$DEVICE" $BID -E4StartTab stats; shoot "stats" 5
+          xcrun simctl terminate "$DEVICE" $BID || true
+          xcrun simctl launch "$DEVICE" $BID; shoot "library-after-play" 5
           ls -la shots
 
       - name: Publish screenshots to the ci-screenshots branch

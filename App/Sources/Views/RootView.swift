@@ -40,7 +40,24 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { library.scanForNewFiles() }
         }
+        #if DEBUG
+        .task { debugLaunchOptions() }
+        #endif
     }
+
+    #if DEBUG
+    /// Used by the cloud build to take screenshots: `-E4AutoPlay "file.gba"`, `-E4StartTab themes`.
+    private func debugLaunchOptions() {
+        let defaults = UserDefaults.standard
+        if let tab = defaults.string(forKey: "E4StartTab") {
+            router.handle(URL(string: "emu4ios://tab?name=\(tab)")!, library: library, themes: themes)
+        }
+        if let file = defaults.string(forKey: "E4AutoPlay") {
+            library.scanForNewFiles()
+            if let game = library.games.first(where: { $0.fileName == file }) { router.play(game) }
+        }
+    }
+    #endif
 }
 
 /// Shown when someone opens a shared theme link, QR code or file.
