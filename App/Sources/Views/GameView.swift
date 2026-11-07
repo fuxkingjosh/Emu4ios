@@ -1,0 +1,192 @@
+import SwiftUI
+
+/// Creates the play session for a game and shows it, or an error if the file can't be loaded.
+struct GameContainerView: View {
+    let game: Game
+    @EnvironmentObject var library: GameLibrary
+    @EnvironmentObject var router: AppRouter
+    @EnvironmentObject var themes: ThemeStore
+    @State private var session: EmulatorSession?
+    @State private var failed = false
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            if let session {
+                GameView(session: session) { quit() }
+            } else if failed {
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle.fill").font(.largeTitle).foregroundStyle(.yellow)
+                    Text("This game couldn't be loaded").font(.title3.bold()).foregroundStyle(.white)
+                    Text("The file may be damaged or not a supported game.").foregroundStyle(.gray)
+                    Button("Back to Library") { router.playing = nil }.buttonStyle(.borderedProminent)
+                }
+                .padding()
+            } else {
+                ProgressView().tint(.white)
+            }
+        }
+        .task {
+            guard session == nil else { return }
+            if let s = EmulatorSession(game: game, romURL: library.romURL(for: game)) {
+                session = s
+                let resume = UserDefaults.standard.object(forKey: "autoResume") as? Bool ?? true
+                s.start(resumeAutoSave: resume)
+            } else {
+                failed = true
+            }
+        }
+        .statusBarHidden()
+        .persistentSystemOverlays(.hidden)
+    }
+
+    private func quit() {
+        guard let session else { router.playing = nil; return }
+        let result = session.finish()
+        let accent = themes.theme(for: game).style.accent.hex
+        library.recordSession(gameID: game.id, seconds: result.seconds, lastFrame: result.lastFrame, accentHex: accent)
+        router.playing = nil
+    }
+}
+
+struct GameView: View {
+    @ObservedObject var session: EmulatorSession
+    let onQuit: () -> Void
+
+    @EnvironmentObject var themes: ThemeStore
+    @EnvironmentObject var library: GameLibrary
+    @EnvironmentObject var gestures: GestureSettings
+    @StateObject private var physical = PhysicalInput()
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var controllerHidden = false
+    @State private var editingLayout = false
+
+    private var theme: Theme { themes.theme(for: library.game(id: session.game.id) ?? session.game) }
+
+    var body: some View {
+        GeometryReader { geo in
+            let isLandscape = geo.size.width > geo.size.height
+            let skin = theme.controller(for: session.game.system)
+            let layout = skin.layout(landscape: isLandscape)
+            let screenRect = layout.screen.rect(in: geo.size)
+            let hideTouch = controllerHidden || (skin.hideWhenControllerConnected && physical.controllerConnected)
+
+            ZStack(alignment: .topLeading) {
+                if theme.background.showInGame {
+                    ThemeBackground(style: theme.background, paused: session.isMenuOpen)
+                } else {
+                    Color.black.ignoresSafeArea()
+                }
+
+                StyledGameScreen(frame: session.loop.frame, system: session.game.system, style: theme.screen)
+                    .frame(width: screenRect.width, height: screenRect.height)
+                    .offset(x: screenRect.minX, y: screenRect.minY)
+
+                ScreenGestureLayer { gesture in handle(gestures.action(for: gesture)) }
+                    .frame(width: screenRect.width, height: screenRect.height)
+                    .offset(x: screenRect.minX, y: screenRect.minY)
+
+                if !hideTouch {
+                    ControllerOverlay(layout: layout, skin: skin, actions: ControllerActions(
+                        press: { input, touch, mask, turbo in session.press(input, touch: touch, mask: mask, turbo: turbo) },
+                        direction: { touch, mask in session.updateDirection(touch: touch, mask: mask) },
+                        release: { input, touch in session.release(input, touch: touch) }))
+                } else {
+                    // Always leave a way into the menu.
+                    Button { session.openMenu() } label: {
+                        Image(systemName: "line.3.horizontal.circle.fill").font(.title).foregroundStyle(.white.opacity(0.35))
+                    }
+                    .position(x: geo.size.width - 34, y: geo.size.height - 34)
+                }
+
+                statusBadges
+                    .position(x: geo.size.width / 2, y: max(screenRect.minY, 0) + 22)
+
+                if let toast = session.toast {
+                    Text(toast)
+                        .font(theme.style.font(.subheadline, weight: .semibold))
+                        .padding(.horizontal, 16).padding(.vertical, 9)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .position(x: geo.size.width / 2, y: screenRect.maxY - 30)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: session.toast)
+        }
+        .ignoresSafeArea()
+        .sheet(isPresented: $session.isMenuOpen, onDismiss: { if !editingLayout { session.closeMenu() } }) {
+            PauseMenuView(session: session, theme: theme, controllerHidden: $controllerHidden,
+                          onEditLayout: { editingLayout = true }, onQuit: onQuit)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .fullScreenCover(isPresented: $editingLayout, onDismiss: { session.closeMenu() }) {
+            ThemeLayoutEditorLauncher(themeID: theme.id, system: session.game.system)
+        }
+        .onAppear(perform: connectPhysicalInput)
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { session.resume() } else { session.pause() }
+        }
+    }
+
+    @ViewBuilder
+    private var statusBadges: some View {
+        HStack(spacing: 8) {
+            if session.isFastForwarding {
+                badge("\(session.speedPreset.formatted())×", icon: "forward.fill")
+            }
+            if session.isRewinding {
+                badge("Rewind", icon: "backward.fill")
+            }
+        }
+    }
+
+    private func badge(_ text: String, icon: String) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption.bold())
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(.ultraThinMaterial, in: Capsule())
+    }
+
+    private func handle(_ action: GestureAction) {
+        switch action {
+        case .none: break
+        case .menu: session.openMenu()
+        case .quickSave: session.quickSave()
+        case .quickLoad: session.quickLoad()
+        case .fastForward: session.toggleFastForward()
+        case .screenshot: session.takeScreenshot()
+        case .clip: session.saveClip()
+        case .toggleController: controllerHidden.toggle()
+        }
+    }
+
+    private func connectPhysicalInput() {
+        physical.onButtons = { mask in session.setPhysicalButtons(mask) }
+        physical.onAction = { action in session.press(action, touch: "physical-\(action.rawValue)") }
+        physical.onActionReleased = { action in session.release(action, touch: "physical-\(action.rawValue)") }
+    }
+}
+
+/// Opens the controller layout editor for the theme in use, duplicating built-in themes first.
+struct ThemeLayoutEditorLauncher: View {
+    let themeID: String
+    let system: GameSystem
+    @EnvironmentObject var themes: ThemeStore
+    @EnvironmentObject var library: GameLibrary
+    @State private var editableID: String?
+
+    var body: some View {
+        Group {
+            if let id = editableID, let theme = themes.theme(id: id) {
+                LayoutEditorView(theme: theme, system: system)
+            } else {
+                ProgressView()
+            }
+        }
+        .onAppear {
+            guard editableID == nil, let theme = themes.theme(id: themeID) else { return }
+            editableID = themes.editableTheme(theme, library: library).id
+        }
+    }
+}

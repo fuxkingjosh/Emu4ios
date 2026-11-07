@@ -1,0 +1,133 @@
+name: Emu4ios
+options:
+  bundleIdPrefix: com.fuxkingjosh
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.10"
+    DEVELOPMENT_TEAM: ${DEVELOPMENT_TEAM}
+    CODE_SIGN_STYLE: Automatic
+targets:
+  Emu4ios:
+    type: application
+    platform: iOS
+    sources:
+      - path: App/Sources
+      - path: App/Bridge
+      - path: App/Resources
+    dependencies:
+      - framework: Vendor/mGBA.xcframework
+        embed: false
+      - sdk: libz.tbd
+      - target: Emu4iosWidget
+    entitlements:
+      path: App/Emu4ios.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.fuxkingjosh.emu4ios
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.fuxkingjosh.emu4ios
+        SWIFT_OBJC_BRIDGING_HEADER: App/Bridge/Emu4ios-Bridging-Header.h
+        HEADER_SEARCH_PATHS: $(SRCROOT)/Vendor/mgba-include
+        GCC_C_LANGUAGE_STANDARD: gnu11
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIcon-Neon AppIcon-Retro AppIcon-Candy AppIcon-Midnight"
+        ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: App/Info.plist
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Emu4ios
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
+        LSApplicationCategoryType: public.app-category.games
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIApplicationSupportsIndirectInputEvents: true
+        UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: false
+        NSPhotoLibraryAddUsageDescription: Emu4ios saves your gameplay clips and screenshots to Photos.
+        GCSupportsControllerUserInteraction: true
+        GCSupportedGameControllers:
+          - ProfileName: ExtendedGamepad
+        CFBundleURLTypes:
+          - CFBundleURLName: com.fuxkingjosh.emu4ios
+            CFBundleURLSchemes: [emu4ios]
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Game Boy Game
+            LSHandlerRank: Owner
+            LSItemContentTypes: [com.fuxkingjosh.emu4ios.gb]
+          - CFBundleTypeName: Game Boy Color Game
+            LSHandlerRank: Owner
+            LSItemContentTypes: [com.fuxkingjosh.emu4ios.gbc]
+          - CFBundleTypeName: Game Boy Advance Game
+            LSHandlerRank: Owner
+            LSItemContentTypes: [com.fuxkingjosh.emu4ios.gba]
+          - CFBundleTypeName: Emu4ios Theme
+            LSHandlerRank: Owner
+            LSItemContentTypes: [com.fuxkingjosh.emu4ios.theme]
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.fuxkingjosh.emu4ios.theme
+            UTTypeDescription: Emu4ios Theme
+            UTTypeConformsTo: [public.json, public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [e4theme]
+              public.mime-type: application/x-emu4ios-theme
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: com.fuxkingjosh.emu4ios.gb
+            UTTypeDescription: Game Boy ROM
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [gb]
+          - UTTypeIdentifier: com.fuxkingjosh.emu4ios.gbc
+            UTTypeDescription: Game Boy Color ROM
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [gbc]
+          - UTTypeIdentifier: com.fuxkingjosh.emu4ios.gba
+            UTTypeDescription: Game Boy Advance ROM
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [gba]
+  Emu4iosWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widget
+      - path: App/Sources/Shared/WidgetShared.swift
+    entitlements:
+      path: Widget/Emu4iosWidget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.fuxkingjosh.emu4ios
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.fuxkingjosh.emu4ios.widget
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Widget/Info.plist
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: Emu4ios
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension

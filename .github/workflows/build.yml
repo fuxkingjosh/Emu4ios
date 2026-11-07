@@ -1,0 +1,133 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      upload_to_testflight:
+        description: "Upload a build to TestFlight (needs the App Store Connect secrets)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build app (cloud Mac)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use newest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Cache mGBA build
+        uses: actions/cache@v4
+        with:
+          path: Vendor
+          key: mgba-${{ hashFiles('scripts/build-mgba.sh', 'scripts/gen-mgba-defines.sh') }}
+
+      - name: Build mGBA for iOS
+        run: ./scripts/build-mgba.sh
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build for iOS Simulator
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Emu4ios.xcodeproj \
+            -scheme Emu4ios \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee build.log | grep -E "error:|warning: .*Emu4ios|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" build.log
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore
+
+  testflight:
+    name: Upload to TestFlight
+    needs: build
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_to_testflight }}
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secrets
+        run: |
+          for v in ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8 DEVELOPMENT_TEAM; do
+            if [ -z "${!v}" ]; then echo "::error::Missing secret for $v — see README 'Publishing'"; exit 1; fi
+          done
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - run: brew install xcodegen
+
+      - uses: actions/cache@v4
+        with:
+          path: Vendor
+          key: mgba-${{ hashFiles('scripts/build-mgba.sh', 'scripts/gen-mgba-defines.sh') }}
+
+      - run: ./scripts/build-mgba.sh
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Write App Store Connect key
+        run: |
+          mkdir -p ~/private_keys
+          echo "$ASC_KEY_P8" > ~/private_keys/AuthKey_${ASC_KEY_ID}.p8
+
+      - name: Archive
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project Emu4ios.xcodeproj \
+            -scheme Emu4ios \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/Emu4ios.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_${ASC_KEY_ID}.p8 \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            | tail -50
+
+      - name: Upload to App Store Connect
+        run: |
+          sed "s/TEAM_ID/$DEVELOPMENT_TEAM/" scripts/ExportOptions.plist > build/ExportOptions.plist
+          xcodebuild -exportArchive \
+            -archivePath build/Emu4ios.xcarchive \
+            -exportOptionsPlist build/ExportOptions.plist \
+            -exportPath build/export \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_${ASC_KEY_ID}.p8 \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"

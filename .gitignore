@@ -1,0 +1,9 @@
+# Generated
+build/
+Vendor/
+*.xcodeproj
+App/Info.plist
+Widget/Info.plist
+DerivedData/
+.DS_Store
+xcuserdata/
