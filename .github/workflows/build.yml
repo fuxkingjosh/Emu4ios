@@ -109,7 +109,10 @@ jobs:
           git config user.name "github-actions"; git config user.email "actions@github.com"
           echo "Screenshots from $GITHUB_SHA" > README.md
           git add -A && git commit -qm "Screenshots for $GITHUB_SHA"
-          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-screenshots
+          for attempt in 1 2 3 4 5; do
+            git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-screenshots && break
+            sleep $((attempt * 10))
+          done
 
       - name: Upload build log
         if: always()
