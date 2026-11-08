@@ -168,6 +168,9 @@ jobs:
           python3 Tests/make_test_roms.py roms
           ( curl -fsSL -o freedoom.zip https://github.com/freedoom/freedoom/releases/download/v0.13.0/freedoom-0.13.0.zip \
             && unzip -j -o freedoom.zip "*/freedoom1.wad" -d roms ) || echo "freedoom download failed"
+          # Free homebrew test programs for the GPU consoles (used only here, never shipped).
+          curl -fsSL -o roms/mandelbrot.n64 "https://raw.githubusercontent.com/PeterLemon/N64/master/CP1/Fractal/32BPP/320X240/Mandelbrot/Single/Mandelbrot32BPP320X240.N64" || true
+          curl -fsSL -o roms/blend.pbp "https://raw.githubusercontent.com/hrydgard/pspautotests/master/demos/blend.pbp" || true
           cp roms/* "$DATA/Documents/Games/"
           echo "system,file,result" > shots/systems.csv
           for f in roms/*; do
