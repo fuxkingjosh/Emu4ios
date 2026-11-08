@@ -87,6 +87,8 @@ actor CoverArtService {
     private func lookupByName(romURL: URL, system: GameSystem) async -> Match? {
         var name = romURL.deletingPathExtension().lastPathComponent
         name = name.replacingOccurrences(of: #"\s*\(Track \d+\)"#, with: "", options: .regularExpression)
+        name = name.replacingOccurrences(of: #"^\s*\d{3,5}\s*[-–.]\s*"#, with: "", options: .regularExpression)
+        name = name.replacingOccurrences(of: "_", with: " ")
         var candidates = [name]
         let noDisc = name.replacingOccurrences(of: #"\s*\(Disc \d+\)"#, with: "", options: .regularExpression)
         if noDisc != name { candidates.append(noDisc) }

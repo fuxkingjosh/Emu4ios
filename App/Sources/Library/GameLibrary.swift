@@ -265,6 +265,8 @@ final class GameLibrary: ObservableObject {
             name.removeSubrange(range)
         }
         name = name.replacingOccurrences(of: "_", with: " ")
+        // Release-list numbers in front ("0294 - Fight Night Round 3").
+        name = name.replacingOccurrences(of: #"^\s*\d{3,5}\s*[-–.]\s*"#, with: "", options: .regularExpression)
         return name.trimmingCharacters(in: .whitespaces).isEmpty ? fileName : name
     }
 
