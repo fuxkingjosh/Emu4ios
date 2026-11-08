@@ -1,5 +1,6 @@
 import CoreHaptics
 import UIKit
+import SwiftUI
 
 /// One beat of a custom vibration pattern.
 struct HapticBeat: Codable, Hashable, Identifiable {
