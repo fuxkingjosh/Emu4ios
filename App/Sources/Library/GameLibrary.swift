@@ -86,6 +86,12 @@ final class GameLibrary: ObservableObject {
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
 
             if url.pathExtension.lowercased() == "e4theme" { continue }
+            // Disc track files (.bin) that belong to a .cue sheet are copied but not listed.
+            if GameSystem.companionExtensions.contains(url.pathExtension.lowercased()),
+               Self.isReferencedByCueSheet(url.lastPathComponent, among: urls) {
+                try? FileManager.default.copyItem(at: url, to: AppPaths.games.appendingPathComponent(url.lastPathComponent))
+                continue
+            }
             guard let system = GameSystem(fileExtension: url.pathExtension) else {
                 skipped.append(url.lastPathComponent)
                 continue
@@ -114,16 +120,17 @@ final class GameLibrary: ObservableObject {
         let files = (try? FileManager.default.contentsOfDirectory(at: AppPaths.games, includingPropertiesForKeys: nil)) ?? []
         let known = Set(games.map(\.fileName))
         var changed = false
-        for file in files where !known.contains(file.lastPathComponent) {
+        let referenced = Self.cueReferencedFiles(in: files)
+        for file in files where !known.contains(file.lastPathComponent) && !referenced.contains(file.lastPathComponent) {
             if let system = GameSystem(fileExtension: file.pathExtension) {
                 add(fileName: file.lastPathComponent, system: system)
                 changed = true
             }
         }
-        // Drop entries whose file was deleted in the Files app.
+        // Drop entries whose file was deleted in the Files app (and track files that now belong to a cue).
         let present = Set(files.map(\.lastPathComponent))
         let before = games.count
-        games.removeAll { !present.contains($0.fileName) }
+        games.removeAll { !present.contains($0.fileName) || referenced.contains($0.fileName) }
         if changed || games.count != before { save() }
         if changed { autoFindArt() }
     }
@@ -143,6 +150,32 @@ final class GameLibrary: ObservableObject {
             n += 1
         }
         return url
+    }
+
+    /// File names listed in .cue/.ccd sheets (their tracks shouldn't show up as separate games).
+    static func cueReferencedFiles(in files: [URL]) -> Set<String> {
+        var names = Set<String>()
+        for sheet in files where ["cue", "ccd"].contains(sheet.pathExtension.lowercased()) {
+            let base = sheet.deletingPathExtension().lastPathComponent
+            if sheet.pathExtension.lowercased() == "ccd" {
+                names.insert(base + ".img"); names.insert(base + ".sub")
+                continue
+            }
+            guard let text = (try? String(contentsOf: sheet, encoding: .utf8)) ?? (try? String(contentsOf: sheet, encoding: .isoLatin1)) else { continue }
+            for line in text.components(separatedBy: .newlines) where line.trimmingCharacters(in: .whitespaces).uppercased().hasPrefix("FILE") {
+                if let first = line.firstIndex(of: "\""), let last = line.lastIndex(of: "\""), first < last {
+                    names.insert(String(line[line.index(after: first)..<last]))
+                }
+            }
+        }
+        return names
+    }
+
+    private static func isReferencedByCueSheet(_ name: String, among urls: [URL]) -> Bool {
+        if cueReferencedFiles(in: urls).contains(name) { return true }
+        // The sheet might already be in the library folder.
+        let existing = (try? FileManager.default.contentsOfDirectory(at: AppPaths.games, includingPropertiesForKeys: nil)) ?? []
+        return cueReferencedFiles(in: existing).contains(name)
     }
 
     /// "Pokemon - Emerald Version (USA, Europe).gba" → "Pokemon - Emerald Version"

@@ -2,7 +2,7 @@
 
 A free, fully customizable retro game emulator for iPhone and iPad.
 
-**Systems:** Game Boy · Game Boy Color · Game Boy Advance (more coming)
+**Systems:** Game Boy · Game Boy Color · Game Boy Advance · PlayStation (more coming)
 
 ## Features
 
@@ -29,6 +29,8 @@ Emu4ios includes **no games**. Players import their own game files.
 | SwiftUI app | `App/Sources` |
 | C bridge to the emulator core | `App/Bridge/E4Emulator.{h,c}` |
 | mGBA core (GB/GBC/GBA, MPL-2.0), built for iOS | `scripts/build-mgba.sh` |
+| PCSX-ReARMed core (PlayStation, GPL-2.0+), built for iOS | `scripts/build-pcsx.sh` |
+| libretro bridge (runs libretro cores) | `App/Bridge/E4Libretro.{h,c}` |
 | Xcode project (generated) | `project.yml` (XcodeGen) |
 | Home Screen widget | `Widget/` |
 | Cloud Mac builds | `.github/workflows/build.yml` |
@@ -52,5 +54,11 @@ The App Store listing needs a privacy policy URL. You can use the link to [`PRIV
 
 ## License
 
-Emu4ios uses [mGBA](https://github.com/mgba-emu/mgba) (Mozilla Public License 2.0).
-Emu4ios is not affiliated with Nintendo.
+Emu4ios is free software under the **GNU General Public License v3** — see [LICENSE](LICENSE).
+
+It uses [mGBA](https://github.com/mgba-emu/mgba) (Mozilla Public License 2.0) and
+[PCSX-ReARMed](https://github.com/libretro/pcsx_rearmed) (GPL-2.0-or-later).
+Emu4ios is not affiliated with Nintendo or Sony Interactive Entertainment.
+
+PlayStation games run without a BIOS file (PCSX-ReARMed's built-in BIOS). For best compatibility you can
+put your own `scph5501.bin` in the Files app under **Emu4ios › BIOS**.

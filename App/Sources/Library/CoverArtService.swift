@@ -27,12 +27,14 @@ actor CoverArtService {
         case .gb: return ("Nintendo - Game Boy", "Nintendo_-_Game_Boy")
         case .gbc: return ("Nintendo - Game Boy Color", "Nintendo_-_Game_Boy_Color")
         case .gba: return ("Nintendo - Game Boy Advance", "Nintendo_-_Game_Boy_Advance")
+        case .ps1: return ("Sony - PlayStation", "Sony_-_PlayStation")
         }
     }
 
     // MARK: Lookup
 
     func lookup(romURL: URL, system: GameSystem) async -> Match? {
+        if system == .ps1 { return await lookupDisc(romURL: romURL) }
         guard let data = try? Data(contentsOf: romURL, options: .mappedIfSafe) else { return nil }
         let crc = data.withUnsafeBytes { raw -> UInt32 in
             UInt32(crc32(0, raw.bindMemory(to: Bytef.self).baseAddress, uInt(data.count)))
@@ -46,13 +48,32 @@ actor CoverArtService {
         }
         // Different system folder (e.g. GB game that's in the GBC set)?
         if name == nil {
-            for other in GameSystem.allCases where other != system {
+            for other in GameSystem.allCases where other != system && other != .ps1 {
                 if let n = await database(for: other)[crc] { name = n; break }
             }
         }
         guard let name else { return nil }
         let image = await boxArt(named: name, system: system)
         return Match(databaseName: name, cleanTitle: Self.clean(name), image: image)
+    }
+
+    /// Disc images are too big to fingerprint quickly, so PlayStation art is matched by file name
+    /// (most dumps already use the official "Game Name (USA)" naming).
+    private func lookupDisc(romURL: URL) async -> Match? {
+        var name = romURL.deletingPathExtension().lastPathComponent
+        name = name.replacingOccurrences(of: #"\s*\(Track \d+\)"#, with: "", options: .regularExpression)
+        var candidates = [name]
+        let noDisc = name.replacingOccurrences(of: #"\s*\(Disc \d+\)"#, with: "", options: .regularExpression)
+        if noDisc != name { candidates.append(noDisc) }
+        for region in ["USA", "Europe", "Japan"] where !name.contains("(") {
+            candidates.append("\(name) (\(region))")
+        }
+        for candidate in candidates {
+            if let image = await boxArt(named: candidate, system: .ps1, searchOtherSystems: false) {
+                return Match(databaseName: candidate, cleanTitle: Self.clean(candidate), image: image)
+            }
+        }
+        return nil
     }
 
     /// "Pokemon - FireRed Version (USA, Europe) (Rev 1)" → "Pokemon - FireRed Version"
@@ -64,14 +85,15 @@ actor CoverArtService {
 
     // MARK: Box art
 
-    private func boxArt(named name: String, system: GameSystem) async -> UIImage? {
+    private func boxArt(named name: String, system: GameSystem, searchOtherSystems: Bool = true) async -> UIImage? {
         // libretro replaces these characters in file names.
         let safe = name.map { "&*/:`<>?\\|\"".contains($0) ? "_" : String($0) }.joined()
         var candidates = [safe]
         // Fall back to the same game without revision tags, then without any tags.
         let noRev = safe.replacingOccurrences(of: #"\s*\((Rev|v)\s*[^)]*\)"#, with: "", options: .regularExpression)
         if noRev != safe { candidates.append(noRev) }
-        for system in [system] + GameSystem.allCases.filter({ $0 != system }) {
+        let systems = searchOtherSystems ? [system] + GameSystem.allCases.filter({ $0 != system && $0 != .ps1 }) : [system]
+        for system in systems {
             let repo = Self.repoName(system).thumbs
             for candidate in candidates {
                 guard let encoded = candidate.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),

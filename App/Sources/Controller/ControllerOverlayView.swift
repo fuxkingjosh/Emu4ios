@@ -180,8 +180,7 @@ final class ControllerTouchView: UIView {
         let dy = (point.y - r.midY) / (r.height / 2)
         guard hypot(dx, dy) > 0.18 else { return 0 }
         let angle = atan2(-dy, dx) * 180 / .pi // 0 = right, 90 = up
-        let right = UInt32(E4ButtonRight.rawValue), left = UInt32(E4ButtonLeft.rawValue)
-        let up = UInt32(E4ButtonUp.rawValue), down = UInt32(E4ButtonDown.rawValue)
+        let right = RetroPad.right, left = RetroPad.left, up = RetroPad.up, down = RetroPad.down
         if !spec.dpadDiagonals {
             switch angle {
             case -45..<45: return right
@@ -417,8 +416,7 @@ enum ButtonRenderer {
         let side = min(r.width, r.height)
         let square = CGRect(x: r.midX - side / 2, y: r.midY - side / 2, width: side, height: side)
         let arm = side / 3
-        let up = UInt32(E4ButtonUp.rawValue), down = UInt32(E4ButtonDown.rawValue)
-        let left = UInt32(E4ButtonLeft.rawValue), right = UInt32(E4ButtonRight.rawValue)
+        let up = RetroPad.up, down = RetroPad.down, left = RetroPad.left, right = RetroPad.right
 
         switch spec.dpadStyle {
         case .circlePad:

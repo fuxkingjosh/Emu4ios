@@ -20,7 +20,6 @@ final class ClipRecorder: @unchecked Sendable {
 
     private let queue = DispatchQueue(label: "emu4ios.clips", qos: .utility)
     private let segmentSeconds = 10.0
-    private let scale = 4
     private let recordEveryNthFrame = 2 // 30 fps clips
 
     private struct Segment {
@@ -49,11 +48,14 @@ final class ClipRecorder: @unchecked Sendable {
 
     // MARK: Session lifecycle (called by the play session)
 
-    func begin(width: Int, height: Int, fps: Double, sampleRate: Double) {
+    func begin(system: GameSystem, fps: Double, sampleRate: Double) {
         queue.async {
             self.discardAll()
-            self.width = width
-            self.height = height
+            // Output size: a sharp multiple of the system's screen (PlayStation resolutions vary, so 960×720).
+            let native = system.screenSize
+            let factor = system == .ps1 ? 3 : 4
+            self.width = Int(native.width) * factor
+            self.height = Int(native.height) * factor
             self.fps = fps
             self.sampleRate = sampleRate
             self.frameCounter = 0
@@ -132,7 +134,7 @@ final class ClipRecorder: @unchecked Sendable {
         guard width > 0, height > 0 else { return nil }
         let url = folder.appendingPathComponent("seg-\(UUID().uuidString).mov")
         guard let writer = try? AVAssetWriter(outputURL: url, fileType: .mov) else { return nil }
-        let outW = width * scale, outH = height * scale
+        let outW = width, outH = height
         let video = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: outW,
@@ -177,7 +179,7 @@ final class ClipRecorder: @unchecked Sendable {
     }
 
     private func writeVideo(_ pixels: [UInt32], _ w: Int, _ h: Int) {
-        guard active, w == width, h == height else { return }
+        guard active, w > 0, h > 0 else { return }
         rotateIfNeeded()
         guard var seg = current, seg.video.isReadyForMoreMediaData,
               let pool = seg.adaptor.pixelBufferPool else { return }
@@ -187,18 +189,18 @@ final class ClipRecorder: @unchecked Sendable {
         CVPixelBufferLockBaseAddress(buffer, [])
         if let base = CVPixelBufferGetBaseAddress(buffer) {
             let rowBytes = CVPixelBufferGetBytesPerRow(buffer)
-            let s = scale
+            let outW = width, outH = height
+            // Nearest-neighbour scale (keeps pixels sharp) + RGBX → BGRA.
+            let xMap = (0..<outW).map { $0 * w / outW }
             pixels.withUnsafeBufferPointer { src in
-                for y in 0..<h {
-                    for dy in 0..<s {
-                        let row = (base + (y * s + dy) * rowBytes).assumingMemoryBound(to: UInt32.self)
-                        for x in 0..<w {
-                            let p = src[y * w + x]
-                            // RGBX (little endian) → BGRA
-                            let r = p & 0xFF, g = (p >> 8) & 0xFF, b = (p >> 16) & 0xFF
-                            let bgra = b | (g << 8) | (r << 16) | 0xFF00_0000
-                            for dx in 0..<s { row[x * s + dx] = bgra }
-                        }
+                for oy in 0..<outH {
+                    let sy = oy * h / outH
+                    let row = (base + oy * rowBytes).assumingMemoryBound(to: UInt32.self)
+                    let srcRow = sy * w
+                    for ox in 0..<outW {
+                        let p = src[srcRow + xMap[ox]]
+                        let r = p & 0xFF, g = (p >> 8) & 0xFF, b = (p >> 16) & 0xFF
+                        row[ox] = b | (g << 8) | (r << 16) | 0xFF00_0000
                     }
                 }
             }

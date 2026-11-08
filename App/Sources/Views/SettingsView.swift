@@ -167,11 +167,12 @@ struct LegalView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Emu4ios does not include any games. Only play games you own and have the right to use.")
                     .font(.headline)
-                Text("Emu4ios is not affiliated with, endorsed by, or sponsored by Nintendo. All trademarks belong to their respective owners.")
+                Text("Emu4ios is not affiliated with, endorsed by, or sponsored by Nintendo or Sony Interactive Entertainment. All trademarks belong to their respective owners.")
                 Divider()
                 Text("Open Source").font(.title3.bold())
                 Text("Game Boy, Game Boy Color and Game Boy Advance emulation is powered by mGBA by Vicki Pfau and contributors, licensed under the Mozilla Public License 2.0. The mGBA source code is available at github.com/mgba-emu/mgba.")
-                Text("Emu4ios's own source code is available at github.com/fuxkingjosh/Emu4ios.")
+                Text("PlayStation emulation is powered by PCSX-ReARMed by notaz and contributors, licensed under the GNU General Public License v2 or later. Source: github.com/libretro/pcsx_rearmed.")
+                Text("Emu4ios is free software under the GNU General Public License v3. Its full source code is available at github.com/fuxkingjosh/Emu4ios.")
             }
             .padding()
         }

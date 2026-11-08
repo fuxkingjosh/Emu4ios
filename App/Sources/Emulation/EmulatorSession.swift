@@ -26,7 +26,7 @@ final class EmulatorSession: ObservableObject {
     static let autoSlot = 0
 
     init?(game: Game, romURL: URL) {
-        guard let core = EmulatorCore(romURL: romURL, saveURL: AppPaths.saveFile(for: game)) else { return nil }
+        guard let core = EmulatorCores.make(system: game.system, romURL: romURL, saveURL: AppPaths.saveFile(for: game)) else { return nil }
         self.game = game
         loop = EmulationLoop(core: core)
         loop.rewindEnabled = UserDefaults.standard.object(forKey: "rewindEnabled") as? Bool ?? true
@@ -40,8 +40,7 @@ final class EmulatorSession: ObservableObject {
         if resumeAutoSave, let auto = saveStates.first(where: { $0.isAuto }) {
             _ = core.loadState(from: auto.url)
         }
-        let size = core.videoSize
-        ClipRecorder.shared.begin(width: size.width, height: size.height, fps: core.fps, sampleRate: core.sampleRate)
+        ClipRecorder.shared.begin(system: game.system, fps: core.fps, sampleRate: core.sampleRate)
         loop.start()
         loop.paused = false
     }
@@ -53,6 +52,7 @@ final class EmulatorSession: ObservableObject {
         let image = loop.frame.makeImage().map { UIImage(cgImage: $0) }
         let seconds = loop.activePlaySeconds
         loop.stop()
+        core.flushSave()
         CloudSync.shared.didChangeFile(AppPaths.saveFile(for: game), kind: .save)
         ClipRecorder.shared.end()
         return (seconds, image)

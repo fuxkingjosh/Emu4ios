@@ -22,6 +22,8 @@ targets:
     dependencies:
       - framework: Vendor/mGBA.xcframework
         embed: false
+      - framework: Vendor/PCSXReARMed.xcframework
+        embed: false
       - sdk: libz.tbd
       - target: Emu4iosWidget
     entitlements:
@@ -35,6 +37,7 @@ targets:
         SWIFT_OBJC_BRIDGING_HEADER: App/Bridge/Emu4ios-Bridging-Header.h
         HEADER_SEARCH_PATHS: $(SRCROOT)/Vendor/mgba-include
         GCC_C_LANGUAGE_STANDARD: gnu11
+        "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIcon-Neon AppIcon-Retro AppIcon-Candy AppIcon-Midnight AppIcon-Gold AppIcon-Ocean AppIcon-Lava AppIcon-Mint AppIcon-BigFour"
         ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES

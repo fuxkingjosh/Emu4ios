@@ -162,6 +162,7 @@ struct GameView: View {
     }
 
     private func connectPhysicalInput() {
+        physical.system = session.game.system
         physical.onButtons = { mask in session.setPhysicalButtons(mask) }
         physical.onAction = { action in session.press(action, touch: "physical-\(action.rawValue)") }
         physical.onActionReleased = { action in session.release(action, touch: "physical-\(action.rawValue)") }

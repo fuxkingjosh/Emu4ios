@@ -38,10 +38,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: Vendor
-          key: mgba-${{ hashFiles('scripts/build-mgba.sh', 'scripts/gen-mgba-defines.sh') }}
+          key: cores-${{ hashFiles('scripts/build-mgba.sh', 'scripts/gen-mgba-defines.sh', 'scripts/build-pcsx.sh') }}
 
       - name: Build mGBA for iOS
         run: ./scripts/build-mgba.sh
+
+      - name: Build PCSX-ReARMed (PlayStation) for iOS
+        run: ./scripts/build-pcsx.sh
 
       - name: Generate Xcode project
         run: xcodegen generate
@@ -80,6 +83,7 @@ jobs:
           DATA=$(xcrun simctl get_app_container "$DEVICE" $BID data)
           mkdir -p "$DATA/Documents/Games" shots
           cp "E4 Demo.gba" "$DATA/Documents/Games/"
+          python3 Tests/make_ps1_test.py "$DATA/Documents/Games/E4 PS1 Demo.exe"
           shoot() { sleep "$2"; xcrun simctl io "$DEVICE" screenshot "shots/$1.png"; }
           for theme in builtin.midnight builtin.neon builtin.dmg builtin.candy; do
             name=${theme#builtin.}
@@ -92,6 +96,8 @@ jobs:
           done
           xcrun simctl terminate "$DEVICE" $BID || true
           xcrun simctl spawn "$DEVICE" defaults write $BID activeThemeID builtin.midnight
+          xcrun simctl launch "$DEVICE" $BID -E4AutoPlay "E4 PS1 Demo.exe"; shoot "game-ps1" 8
+          xcrun simctl terminate "$DEVICE" $BID || true
           xcrun simctl launch "$DEVICE" $BID -E4StartTab themes; shoot "themes" 6
           xcrun simctl terminate "$DEVICE" $BID || true
           xcrun simctl launch "$DEVICE" $BID -E4StartTab stats; shoot "stats" 5
@@ -151,9 +157,11 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: Vendor
-          key: mgba-${{ hashFiles('scripts/build-mgba.sh', 'scripts/gen-mgba-defines.sh') }}
+          key: cores-${{ hashFiles('scripts/build-mgba.sh', 'scripts/gen-mgba-defines.sh', 'scripts/build-pcsx.sh') }}
 
       - run: ./scripts/build-mgba.sh
+
+      - run: ./scripts/build-pcsx.sh
 
       - name: Generate project
         run: xcodegen generate
@@ -209,9 +217,11 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: Vendor
-          key: mgba-${{ hashFiles('scripts/build-mgba.sh', 'scripts/gen-mgba-defines.sh') }}
+          key: cores-${{ hashFiles('scripts/build-mgba.sh', 'scripts/gen-mgba-defines.sh', 'scripts/build-pcsx.sh') }}
 
       - run: ./scripts/build-mgba.sh
+
+      - run: ./scripts/build-pcsx.sh
 
       - run: xcodegen generate
 

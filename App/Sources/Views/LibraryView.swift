@@ -264,6 +264,7 @@ struct GameArtwork: View {
         case .gb: return [Color(hue: 0.22, saturation: 0.5, brightness: 0.55), Color(hue: 0.25, saturation: 0.6, brightness: 0.3)]
         case .gbc: return [Color(hue: hue, saturation: 0.65, brightness: 0.85), Color(hue: (hue + 0.1).truncatingRemainder(dividingBy: 1), saturation: 0.7, brightness: 0.5)]
         case .gba: return [Color(hue: 0.72, saturation: 0.55, brightness: 0.7), Color(hue: hue, saturation: 0.6, brightness: 0.45)]
+        case .ps1: return [Color(white: 0.55), Color(hue: hue, saturation: 0.35, brightness: 0.3)]
         }
     }
 }

@@ -1,7 +1,7 @@
 import Foundation
 
 enum GameSystem: String, Codable, CaseIterable, Identifiable {
-    case gb, gbc, gba
+    case gb, gbc, gba, ps1
 
     var id: String { rawValue }
 
@@ -10,6 +10,7 @@ enum GameSystem: String, Codable, CaseIterable, Identifiable {
         case .gb: return "Game Boy"
         case .gbc: return "Game Boy Color"
         case .gba: return "Game Boy Advance"
+        case .ps1: return "PlayStation"
         }
     }
 
@@ -18,6 +19,7 @@ enum GameSystem: String, Codable, CaseIterable, Identifiable {
         case .gb: return "GB"
         case .gbc: return "GBC"
         case .gba: return "GBA"
+        case .ps1: return "PS1"
         }
     }
 
@@ -26,6 +28,7 @@ enum GameSystem: String, Codable, CaseIterable, Identifiable {
         case .gb: return ["gb"]
         case .gbc: return ["gbc"]
         case .gba: return ["gba"]
+        case .ps1: return ["cue", "chd", "pbp", "iso", "img", "m3u", "bin", "ccd", "exe"]
         }
     }
 
@@ -33,6 +36,7 @@ enum GameSystem: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .gb, .gbc: return CGSize(width: 160, height: 144)
         case .gba: return CGSize(width: 240, height: 160)
+        case .ps1: return CGSize(width: 320, height: 240) // shown at 4:3 whatever the game's resolution
         }
     }
 
@@ -41,6 +45,7 @@ enum GameSystem: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .gb, .gbc: return [.dpad, .a, .b, .start, .select]
         case .gba: return [.dpad, .a, .b, .l, .r, .start, .select]
+        case .ps1: return [.dpad, .cross, .circle, .square, .triangle, .l, .r, .l2, .r2, .start, .select]
         }
     }
 
@@ -59,10 +64,16 @@ enum GameSystem: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    /// Engine that runs this system.
+    var usesLibretro: Bool { self == .ps1 }
+
+    /// Disc track files that belong to a .cue sheet aren't games on their own.
+    static let companionExtensions: Set<String> = ["bin", "sub", "img"]
+
     static var allExtensions: [String] { allCases.flatMap(\.fileExtensions) }
 }
 
 /// Systems we plan to add, shown as "coming soon" in the library.
 enum UpcomingSystem: String, CaseIterable {
-    case nes = "NES", snes = "SNES", n64 = "N64", ds = "Nintendo DS", genesis = "Genesis"
+    case nes = "NES", snes = "SNES", n64 = "N64", ds = "Nintendo DS", psp = "PSP", genesis = "Genesis"
 }

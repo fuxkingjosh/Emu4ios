@@ -12,14 +12,23 @@ final class FrameBuffer: @unchecked Sendable {
     init(width: Int, height: Int) {
         self.width = width
         self.height = height
-        pixels = [UInt32](repeating: 0, count: 256 * 224)
+        pixels = [UInt32](repeating: 0, count: max(width * height, 256 * 224))
     }
 
-    func write(_ fill: (UnsafeMutablePointer<UInt32>, Int, Int) -> Void, width: Int, height: Int) {
+    /// Copies a frame in (rows of `stride` pixels), growing the buffer if the resolution changed.
+    func write(from src: UnsafePointer<UInt32>, width w: Int, height h: Int, stride: Int) {
+        guard w > 0, h > 0 else { return }
         lock.lock(); defer { lock.unlock() }
-        self.width = width
-        self.height = height
-        pixels.withUnsafeMutableBufferPointer { fill($0.baseAddress!, width, height) }
+        if pixels.count < w * h { pixels = [UInt32](repeating: 0, count: w * h) }
+        width = w
+        height = h
+        pixels.withUnsafeMutableBufferPointer { dst in
+            if stride == w {
+                dst.baseAddress!.update(from: src, count: w * h)
+            } else {
+                for y in 0..<h { (dst.baseAddress! + y * w).update(from: src + y * stride, count: w) }
+            }
+        }
         version &+= 1
     }
 
@@ -81,7 +90,8 @@ final class EmulationLoop: @unchecked Sendable {
         frame = FrameBuffer(width: size.width, height: size.height)
         audio = AudioOutput(sampleRate: core.sampleRate)
         let stateSize = core.saveState()?.count ?? 400_000
-        rewind = RewindBuffer(stateSize: stateSize)
+        // Big states (PlayStation ≈ 4 MB) are captured less often to keep memory in check.
+        rewind = RewindBuffer(stateSize: stateSize, interval: stateSize > 1_000_000 ? 20 : 10)
     }
 
     // MARK: Controls (any thread)
@@ -239,9 +249,7 @@ final class EmulationLoop: @unchecked Sendable {
     }
 
     private func publishFrame() {
-        let size = core.videoSize
-        frame.write({ dest, w, h in core.copyPixels(into: dest, width: w, height: h) },
-                    width: size.width, height: size.height)
+        core.withPixels { src, w, h, stride in frame.write(from: src, width: w, height: h, stride: stride) }
     }
 
     func clearRewind() { lock.withLock { rewind.clear() } }

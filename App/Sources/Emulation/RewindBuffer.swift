@@ -10,7 +10,7 @@ struct RewindBuffer {
 
     init(stateSize: Int, memoryBudgetMB: Int = 64, interval: Int = 10) {
         let budget = memoryBudgetMB * 1_024 * 1_024
-        capacity = max(30, min(1_800, budget / max(stateSize, 1)))
+        capacity = max(8, min(1_800, budget / max(stateSize, 1)))
         self.interval = interval
     }
 

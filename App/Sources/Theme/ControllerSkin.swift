@@ -2,6 +2,8 @@ import SwiftUI
 
 enum ControlInput: String, Codable, CaseIterable, Identifiable {
     case dpad, a, b, l, r, start, select
+    // PlayStation
+    case cross, circle, square, triangle, l2, r2
     // App actions that can be placed on the controller like any button.
     case menu, fastForward, rewind, quickSave, quickLoad, screenshot, clip
 
@@ -27,6 +29,12 @@ enum ControlInput: String, Codable, CaseIterable, Identifiable {
         case .quickLoad: return "LOAD"
         case .screenshot: return "📷"
         case .clip: return "CLIP"
+        case .cross: return "✕"
+        case .circle: return "○"
+        case .square: return "□"
+        case .triangle: return "△"
+        case .l2: return "L2"
+        case .r2: return "R2"
         }
     }
 
@@ -37,20 +45,37 @@ enum ControlInput: String, Codable, CaseIterable, Identifiable {
         case .quickSave: return "Quick Save"
         case .quickLoad: return "Quick Load"
         case .clip: return "Save Clip"
+        case .l2: return "L2"
+        case .r2: return "R2"
         default: return rawValue.prefix(1).uppercased() + rawValue.dropFirst()
         }
     }
 
-    /// Emulator button bits for game inputs.
+    /// RetroPad bits for game inputs.
     var buttonMask: UInt32 {
         switch self {
-        case .a: return UInt32(E4ButtonA.rawValue)
-        case .b: return UInt32(E4ButtonB.rawValue)
-        case .l: return UInt32(E4ButtonL.rawValue)
-        case .r: return UInt32(E4ButtonR.rawValue)
-        case .start: return UInt32(E4ButtonStart.rawValue)
-        case .select: return UInt32(E4ButtonSelect.rawValue)
+        case .a, .circle: return RetroPad.a
+        case .b, .cross: return RetroPad.b
+        case .square: return RetroPad.y
+        case .triangle: return RetroPad.x
+        case .l: return RetroPad.l
+        case .r: return RetroPad.r
+        case .l2: return RetroPad.l2
+        case .r2: return RetroPad.r2
+        case .start: return RetroPad.start
+        case .select: return RetroPad.select
         default: return 0
+        }
+    }
+
+    /// PlayStation-style label colors.
+    var symbolColor: ThemeColor? {
+        switch self {
+        case .cross: return ThemeColor(hex: "#7CB2E8")
+        case .circle: return ThemeColor(hex: "#FF6B6B")
+        case .square: return ThemeColor(hex: "#F49AC1")
+        case .triangle: return ThemeColor(hex: "#40E2A0")
+        default: return nil
         }
     }
 }
@@ -171,6 +196,7 @@ struct ControllerSkin: Codable, Hashable {
     // MARK: Default layouts
 
     static func standard(for system: GameSystem) -> ControllerSkin {
+        if system == .ps1 { return standardPlayStation() }
         let aspect = system.screenSize.width / system.screenSize.height
         let hasShoulders = system == .gba
 
@@ -211,6 +237,52 @@ struct ControllerSkin: Codable, Hashable {
         let landscape = ControllerLayout(
             screen: NormRect(x: (1 - screenW) / 2, y: 0.03, w: screenW, h: 0.86), buttons: l)
 
+        return ControllerSkin(portrait: portrait, landscape: landscape)
+    }
+
+    /// PlayStation layout: four face buttons in a diamond, two shoulder buttons per side.
+    static func standardPlayStation() -> ControllerSkin {
+        func face(_ input: ControlInput, _ x: Double, _ y: Double, _ w: Double, _ h: Double) -> ButtonSpec {
+            var b = ButtonSpec(input: input, frame: NormRect(x: x, y: y, w: w, h: h), labelSize: 22)
+            b.labelColor = input.symbolColor ?? b.labelColor
+            return b
+        }
+        let pw = 0.15, ph = pw * 0.46 // circles on a ~9:19.5 phone
+        let pcx = 0.78, pcy = 0.70
+        let portrait = ControllerLayout(screen: NormRect(x: 0, y: 0.06, w: 1, h: 0.36), buttons: [
+            ButtonSpec(input: .dpad, frame: NormRect(x: 0.04, y: 0.59, w: 0.40, h: 0.185), shape: .roundedRect),
+            face(.triangle, pcx - pw / 2, pcy - ph * 1.5, pw, ph),
+            face(.circle, pcx + pw * 0.55, pcy - ph / 2, pw, ph),
+            face(.cross, pcx - pw / 2, pcy + ph * 0.5, pw, ph),
+            face(.square, pcx - pw * 1.55, pcy - ph / 2, pw, ph),
+            ButtonSpec(input: .l2, frame: NormRect(x: 0.03, y: 0.45, w: 0.2, h: 0.04), shape: .pill, labelSize: 13),
+            ButtonSpec(input: .l, frame: NormRect(x: 0.03, y: 0.50, w: 0.2, h: 0.04), shape: .pill, label: "L1", labelSize: 13),
+            ButtonSpec(input: .r2, frame: NormRect(x: 0.77, y: 0.45, w: 0.2, h: 0.04), shape: .pill, labelSize: 13),
+            ButtonSpec(input: .r, frame: NormRect(x: 0.77, y: 0.50, w: 0.2, h: 0.04), shape: .pill, label: "R1", labelSize: 13),
+            ButtonSpec(input: .select, frame: NormRect(x: 0.28, y: 0.86, w: 0.20, h: 0.04), shape: .pill, labelSize: 11),
+            ButtonSpec(input: .start, frame: NormRect(x: 0.52, y: 0.86, w: 0.20, h: 0.04), shape: .pill, labelSize: 11),
+            ButtonSpec(input: .menu, frame: NormRect(x: 0.44, y: 0.93, w: 0.12, h: 0.04), shape: .pill, labelSize: 14),
+            ButtonSpec(input: .fastForward, frame: NormRect(x: 0.82, y: 0.93, w: 0.12, h: 0.04), shape: .pill, labelSize: 14),
+            ButtonSpec(input: .rewind, frame: NormRect(x: 0.06, y: 0.93, w: 0.12, h: 0.04), shape: .pill, labelSize: 14),
+        ])
+        let lw = 0.075, lh = lw * 2.17
+        let lcx = 0.905, lcy = 0.58
+        let landscape = ControllerLayout(screen: NormRect(x: 0.19, y: 0.03, w: 0.62, h: 0.86), buttons: [
+            ButtonSpec(input: .dpad, frame: NormRect(x: 0.02, y: 0.40, w: 0.17, h: 0.40), shape: .roundedRect),
+            face(.triangle, lcx - lw / 2, lcy - lh * 1.5, lw, lh),
+            face(.circle, lcx + lw * 0.5, lcy - lh / 2, lw, lh),
+            face(.cross, lcx - lw / 2, lcy + lh * 0.5, lw, lh),
+            face(.square, lcx - lw * 1.5, lcy - lh / 2, lw, lh),
+            ButtonSpec(input: .l2, frame: NormRect(x: 0.02, y: 0.03, w: 0.12, h: 0.10), shape: .pill, labelSize: 13),
+            ButtonSpec(input: .l, frame: NormRect(x: 0.02, y: 0.15, w: 0.12, h: 0.10), shape: .pill, label: "L1", labelSize: 13),
+            ButtonSpec(input: .r2, frame: NormRect(x: 0.86, y: 0.03, w: 0.12, h: 0.10), shape: .pill, labelSize: 13),
+            ButtonSpec(input: .r, frame: NormRect(x: 0.86, y: 0.15, w: 0.12, h: 0.10), shape: .pill, label: "R1", labelSize: 13),
+            ButtonSpec(input: .select, frame: NormRect(x: 0.03, y: 0.88, w: 0.11, h: 0.08), shape: .pill, labelSize: 10),
+            ButtonSpec(input: .start, frame: NormRect(x: 0.86, y: 0.88, w: 0.11, h: 0.08), shape: .pill, labelSize: 10),
+            ButtonSpec(input: .menu, frame: NormRect(x: 0.46, y: 0.90, w: 0.08, h: 0.08), shape: .pill, labelSize: 13),
+            ButtonSpec(input: .fastForward, frame: NormRect(x: 0.86, y: 0.27, w: 0.06, h: 0.09), shape: .pill, labelSize: 13),
+            ButtonSpec(input: .rewind, frame: NormRect(x: 0.08, y: 0.27, w: 0.06, h: 0.09), shape: .pill, labelSize: 13),
+        ])
         return ControllerSkin(portrait: portrait, landscape: landscape)
     }
 
