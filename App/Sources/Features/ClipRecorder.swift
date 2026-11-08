@@ -53,7 +53,13 @@ final class ClipRecorder: @unchecked Sendable {
             self.discardAll()
             // Output size: a sharp multiple of the system's screen (PlayStation resolutions vary, so 960×720).
             let native = system.screenSize
-            let factor = system == .ps1 ? 3 : 4
+            // Sharp but light: 640×576 (GB), 720×480 (GBA), 640×480 (PS1).
+            let factor: Int
+            switch system {
+            case .gb, .gbc: factor = 4
+            case .gba: factor = 3
+            case .ps1: factor = 2
+            }
             self.width = Int(native.width) * factor
             self.height = Int(native.height) * factor
             self.fps = fps
@@ -76,9 +82,20 @@ final class ClipRecorder: @unchecked Sendable {
     func appendVideo(pixels: UnsafePointer<UInt32>, width w: Int, height h: Int) {
         frameCounter += 1
         guard isEnabled, frameCounter % recordEveryNthFrame == 0 else { return }
+        // If the encoder is behind, skip this frame instead of piling frames up in memory.
+        guard pendingFrames.withLock({ count -> Bool in
+            guard count < 2 else { return false }
+            count += 1
+            return true
+        }) else { return }
         let copy = Array(UnsafeBufferPointer(start: pixels, count: w * h))
-        queue.async { self.writeVideo(copy, w, h) }
+        queue.async {
+            self.writeVideo(copy, w, h)
+            self.pendingFrames.withLock { $0 -= 1 }
+        }
     }
+
+    private let pendingFrames = LockedCounter()
 
     /// Interleaved stereo Int16.
     func appendAudio(samples: UnsafePointer<Int16>, frames: Int) {
@@ -310,5 +327,15 @@ final class ClipRecorder: @unchecked Sendable {
             await export.export()
             completion(export.status == .completed ? out : nil)
         }
+    }
+}
+
+/// Tiny lock-protected integer.
+final class LockedCounter: @unchecked Sendable {
+    private var value = 0
+    private let lock = NSLock()
+    func withLock<T>(_ body: (inout Int) -> T) -> T {
+        lock.lock(); defer { lock.unlock() }
+        return body(&value)
     }
 }
