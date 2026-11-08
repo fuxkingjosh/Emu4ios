@@ -190,3 +190,61 @@ jobs:
             -authenticationKeyPath ~/private_keys/AuthKey_${ASC_KEY_ID}.p8 \
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+  ipa:
+    name: Build IPA for sideloading (AltStore / SideStore)
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - run: brew install xcodegen
+
+      - uses: actions/cache@v4
+        with:
+          path: Vendor
+          key: mgba-${{ hashFiles('scripts/build-mgba.sh', 'scripts/gen-mgba-defines.sh') }}
+
+      - run: ./scripts/build-mgba.sh
+
+      - run: xcodegen generate
+
+      - name: Build Release for iPhone (ad-hoc signed, entitlements kept)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Emu4ios.xcodeproj -scheme Emu4ios \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath dd \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO \
+            DEVELOPMENT_TEAM="" PROVISIONING_PROFILE_SPECIFIER="" \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            | tee ipa-build.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" ipa-build.log
+
+      - name: Package IPA
+        run: |
+          APP=dd/Build/Products/Release-iphoneos/Emu4ios.app
+          ls "$APP" "$APP/PlugIns" || true
+          codesign -d --entitlements - "$APP" 2>/dev/null | head -20 || true
+          mkdir -p Payload && cp -R "$APP" Payload/
+          zip -qry Emu4ios.ipa Payload
+          ls -lh Emu4ios.ipa
+
+      - name: Publish to the "Latest Build" release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="Unsigned test build #${{ github.run_number }} from ${GITHUB_SHA::7}. Install with AltStore or SideStore (they sign it with your Apple ID)."
+          for attempt in 1 2 3; do
+            gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+            gh release create latest Emu4ios.ipa --prerelease --title "Latest Build (#${{ github.run_number }})" --notes "$NOTES" --target "$GITHUB_SHA" && break
+            sleep 15
+          done
