@@ -229,3 +229,69 @@ struct ScreenStyle: Codable, Hashable {
     var glow: Double = 0
     var integerScaling: Bool = false
 }
+
+// MARK: - Tolerant decoding (fills in defaults for missing fields)
+
+extension Theme {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(name: try c.decode(String.self, forKey: .name))
+        id = c.value(.id, id)
+        author = c.value(.author, author)
+        schema = c.value(.schema, schema)
+        createdAt = c.value(.createdAt, createdAt)
+        isBuiltIn = c.value(.isBuiltIn, isBuiltIn)
+        style = c.value(.style, style)
+        background = c.value(.background, background)
+        screen = c.value(.screen, screen)
+        controllers = c.value(.controllers, controllers)
+        defaultController = c.value(.defaultController, defaultController)
+    }
+}
+
+extension AppStyle {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init()
+        accent = c.value(.accent, accent)
+        background = c.value(.background, background)
+        surface = c.value(.surface, surface)
+        primaryText = c.value(.primaryText, primaryText)
+        secondaryText = c.value(.secondaryText, secondaryText)
+        fontDesign = c.value(.fontDesign, fontDesign)
+        fontName = c.value(.fontName, fontName)
+        fontScale = c.value(.fontScale, fontScale)
+        cornerRadius = c.value(.cornerRadius, cornerRadius)
+        libraryLayout = c.value(.libraryLayout, libraryLayout)
+        darkMode = c.value(.darkMode, darkMode)
+        labels = c.value(.labels, labels)
+    }
+}
+
+extension BackgroundStyle {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init()
+        kind = c.value(.kind, kind)
+        colors = c.value(.colors, colors)
+        speed = c.value(.speed, speed)
+        density = c.value(.density, density)
+        imageData = c.value(.imageData, imageData)
+        imageDim = c.value(.imageDim, imageDim)
+        showInGame = c.value(.showInGame, showInGame)
+    }
+}
+
+extension ScreenStyle {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init()
+        filter = c.value(.filter, filter)
+        intensity = c.value(.intensity, intensity)
+        borderColor = c.value(.borderColor, borderColor)
+        borderWidth = c.value(.borderWidth, borderWidth)
+        cornerRadius = c.value(.cornerRadius, cornerRadius)
+        glow = c.value(.glow, glow)
+        integerScaling = c.value(.integerScaling, integerScaling)
+    }
+}
