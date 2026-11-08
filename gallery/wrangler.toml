@@ -1,0 +1,9 @@
+name = "emu4ios-gallery"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "emu4ios-gallery"
+database_id = "7aae335f-7fc5-4aea-aeeb-3de8b6a11028"

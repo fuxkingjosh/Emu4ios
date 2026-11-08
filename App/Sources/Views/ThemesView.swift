@@ -10,19 +10,34 @@ struct ThemesView: View {
     @State private var showFileImporter = false
     @State private var showPasteLink = false
     @State private var pastedLink = ""
+    @State private var uploading: Theme?
+    @State private var tab = 0
 
     var body: some View {
         let style = themes.active.style
         NavigationStack {
             ZStack {
                 ThemeBackground(style: themes.active.background)
-                ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 16)], spacing: 18) {
-                        ForEach(themes.allThemes) { theme in
-                            themeCell(theme, style: style)
-                        }
+                VStack(spacing: 0) {
+                    Picker("Themes", selection: $tab) {
+                        Text("My Themes").tag(0)
+                        Text("Gallery").tag(1)
                     }
-                    .padding()
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
+                    .padding(.top, 4)
+                    if tab == 0 {
+                        ScrollView {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 16)], spacing: 18) {
+                                ForEach(themes.allThemes) { theme in
+                                    themeCell(theme, style: style)
+                                }
+                            }
+                            .padding()
+                        }
+                    } else {
+                        GalleryView()
+                    }
                 }
             }
             .navigationTitle(themes.active.label(.themesTitle))
@@ -55,6 +70,7 @@ struct ThemesView: View {
             }
             .sheet(item: $editing) { theme in ThemeEditorView(themeID: theme.id) }
             .sheet(item: $sharing) { theme in ShareThemeSheet(theme: theme) }
+            .sheet(item: $uploading) { theme in UploadThemeSheet(theme: theme) }
         }
     }
 
@@ -94,6 +110,7 @@ struct ThemesView: View {
                         editing = theme.isBuiltIn ? themes.duplicate(theme) : theme
                     } label: { Label(theme.isBuiltIn ? "Customize a Copy" : "Edit", systemImage: "paintbrush") }
                     Button { sharing = theme } label: { Label("Share", systemImage: "square.and.arrow.up") }
+                    Button { uploading = theme } label: { Label("Upload to Gallery", systemImage: "icloud.and.arrow.up") }
                     Button { themes.duplicate(theme) } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
                     if !theme.isBuiltIn {
                         Button(role: .destructive) { themes.delete(theme) } label: { Label("Delete", systemImage: "trash") }

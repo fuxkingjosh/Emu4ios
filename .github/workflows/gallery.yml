@@ -1,0 +1,37 @@
+name: Deploy theme gallery
+
+on:
+  push:
+    branches: [main]
+    paths: ["gallery/**", ".github/workflows/gallery.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check secrets
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::warning::Add the CLOUDFLARE_API_TOKEN secret to deploy the gallery (see README)."; exit 0
+          fi
+      - name: Deploy worker
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        working-directory: gallery
+        run: |
+          npx --yes wrangler@4 d1 execute emu4ios-gallery --remote --file=schema.sql
+          npx --yes wrangler@4 deploy 2>&1 | tee deploy.log
+          URL=$(grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' deploy.log | head -1)
+          echo "Gallery URL: $URL"
+          if [ -n "$URL" ] && [ "$(cat endpoint.txt 2>/dev/null)" != "$URL" ]; then
+            echo "$URL" > endpoint.txt
+            git config user.name "github-actions"; git config user.email "actions@github.com"
+            git add endpoint.txt && git commit -m "Gallery endpoint: $URL" && git push
+          fi

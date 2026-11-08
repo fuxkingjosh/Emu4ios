@@ -7,3 +7,6 @@ Widget/Info.plist
 DerivedData/
 .DS_Store
 xcuserdata/
+gallery/.wrangler/
+gallery/deploy.log
+gallery/node_modules/
