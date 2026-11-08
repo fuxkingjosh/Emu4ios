@@ -161,7 +161,7 @@ write("test.prg", [0x01, 0x08, 0x0B, 0x08, 0x0A, 0x00, 0x89, 0x31, 0x30, 0x00, 0
 write("test.adf", bytearray(901120))
 
 # Nintendo DS: both CPUs branch to themselves (direct boot, no logo or BIOS needed).
-nds = bytearray(0x400)
+nds = bytearray(0x20000)
 nds[0:12] = b"EMU4IOS TEST"
 nds[0x0C:0x10] = b"E4TE"
 nds[0x20:0x30] = struct.pack("<IIII", 0x200, 0x02000000, 0x02000000, 4)   # ARM9 offset, entry, RAM, size

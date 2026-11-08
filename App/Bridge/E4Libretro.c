@@ -150,6 +150,7 @@ typedef struct {
     void* handle;
     char path[1024];
     bool initialized;
+    void (*deinit)(void);
     void (*set_environment)(retro_environment_t);
     void (*set_video_refresh)(retro_video_refresh_t);
     void (*set_audio_sample)(retro_audio_sample_t);
@@ -223,6 +224,7 @@ static CoreAPI* load_core(const char* path) {
     SYM(set_input_poll, "retro_set_input_poll")
     SYM(set_input_state, "retro_set_input_state")
     SYM(init, "retro_init")
+    SYM(deinit, "retro_deinit")
     SYM(get_system_info, "retro_get_system_info")
     SYM(get_system_av_info, "retro_get_system_av_info")
     SYM(set_controller_port_device, "retro_set_controller_port_device")
@@ -623,7 +625,14 @@ void e4lr_destroy(E4Libretro* lr) {
     if (lr->gl) e4gl_destroy(lr->gl);
 #endif
     free(lr->memoryMap);
-    // Keep the core initialized between games (some cores don't like deinit/init cycles).
+    // Shut the core down completely, like RetroArch does when you close a game, so the next game
+    // starts from a clean slate (some cores keep per-game state that only retro_deinit clears).
+    // DOSBox Pure is the exception: it can't be started a second time after retro_deinit, so it stays up.
+    bool keepAlive = api && (strstr(api->path, "DOSBoxPure") || strstr(api->path, "dosboxpure"));
+    if (api && !keepAlive) {
+        api->deinit();
+        api->initialized = false;
+    }
     if (current == lr) current = NULL;
     free(lr->video);
     free(lr->audio);

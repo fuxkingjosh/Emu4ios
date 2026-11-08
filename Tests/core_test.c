@@ -1,3 +1,4 @@
+#include <string.h>
 // Runs any libretro core through Emu4ios's bridge for a few seconds and dumps the last frame.
 // usage: core_test <core.so/.dylib> <content> <out.ppm> [frames] [buttons]
 #include "E4Libretro.h"
@@ -7,6 +8,14 @@ int main(int argc, char** argv) {
     if (argc < 4) { fprintf(stderr, "usage\n"); return 2; }
     int frames = argc > 4 ? atoi(argv[4]) : 120;
     unsigned buttons = argc > 5 ? (unsigned) strtoul(argv[5], 0, 0) : 0;
+    // E4_OPTS="key=value;key=value" — the same core options the app sets.
+    const char* opts = getenv("E4_OPTS");
+    if (opts) {
+        char buf[4096]; snprintf(buf, sizeof buf, "%s", opts);
+        for (char* tok = strtok(buf, ";"); tok; tok = strtok(NULL, ";")) {
+            char* eq = strchr(tok, '='); if (!eq) continue; *eq = 0; e4lr_set_option(tok, eq + 1);
+        }
+    }
     E4Libretro* lr = e4lr_create(argv[1], argv[2], "/tmp/core_test.srm", "/tmp");
     if (!lr) { puts("LOAD FAILED"); return 1; }
     char name[96]; e4lr_core_name(name, sizeof name);
