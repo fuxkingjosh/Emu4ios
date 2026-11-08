@@ -310,7 +310,11 @@ enum GameSystem: String, Codable, CaseIterable, Identifiable {
         case .psp:
             return ["ppsspp_cpu_core": "IR JIT", "ppsspp_internal_resolution": "960x544",
                     "ppsspp_fast_memory": "disabled", "ppsspp_auto_frameskip": "disabled",
-                    "ppsspp_frame_duplication": "enabled", "ppsspp_backend": "opengl"]
+                    "ppsspp_frame_duplication": "enabled", "ppsspp_backend": "opengl",
+                    // Finish each frame before it's handed over; buffered frames could be read half-drawn
+                    // (missing characters, stray pieces of the previous frame).
+                    "ppsspp_inflight_frames": "No buffer",
+                    "ppsspp_texture_filtering": "Auto max quality"]
         case .nds:
             return ["melonds_render_mode": "software", "melonds_threaded_renderer": "enabled",
                     "melonds_console_mode": "ds", "melonds_sysfile_mode": "builtin",
