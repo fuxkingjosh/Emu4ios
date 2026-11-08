@@ -82,7 +82,7 @@ struct GameView: View {
             let hideTouch = controllerHidden || (skin.hideWhenControllerConnected && physical.controllerConnected)
 
             ZStack(alignment: .topLeading) {
-                if theme.background.showInGame {
+                if theme.background.showInGame && layout.screen.h <= 0.95 {
                     ThemeBackground(style: theme.background, paused: session.isMenuOpen)
                 } else {
                     Color.black.ignoresSafeArea()
@@ -97,14 +97,15 @@ struct GameView: View {
                         .foregroundStyle(.white.opacity(0.7))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
-                        StyledGameScreen(frame: session.loop.frame, system: session.game.system, style: theme.screen,
+                        StyledGameScreen(frame: session.loop.frame, system: session.game.system,
+                                         style: screenStyle(fullScreen: layout.screen.h > 0.95),
                                          accent: theme.style.accent.color)
                     }
                 }
                 .frame(width: screenRect.width, height: screenRect.height)
                 .offset(x: screenRect.minX, y: screenRect.minY)
 
-                screenInputLayer(size: screenRect.size)
+                screenInputLayer(size: screenRect.size, fullScreen: layout.screen.h > 0.95)
                     .frame(width: screenRect.width, height: screenRect.height)
                     .offset(x: screenRect.minX, y: screenRect.minY)
 
@@ -168,11 +169,23 @@ struct GameView: View {
         }
     }
 
+    /// A full-screen picture has no frame, border or glow around it.
+    private func screenStyle(fullScreen: Bool) -> ScreenStyle {
+        var style = theme.screen
+        if fullScreen {
+            style.bezel = .none
+            style.borderWidth = 0
+            style.cornerRadius = 0
+            style.glow = 0
+        }
+        return style
+    }
+
     /// DS games use the screen as their touch screen, computers as a trackpad; everything else gets screen gestures.
     @ViewBuilder
-    private func screenInputLayer(size: CGSize) -> some View {
+    private func screenInputLayer(size: CGSize, fullScreen: Bool) -> some View {
         let system = session.game.system
-        let picture = StyledGameScreen.pictureRect(in: size, system: system, style: theme.screen)
+        let picture = StyledGameScreen.pictureRect(in: size, system: system, style: screenStyle(fullScreen: fullScreen))
         switch system.screenTouch {
         case .touchScreen:
             ScreenTouchLayer(mode: .touchScreen, pictureRect: picture,

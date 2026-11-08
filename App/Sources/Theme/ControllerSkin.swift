@@ -251,7 +251,9 @@ struct ControllerSkin: Codable, Hashable {
                 guard let m = match else { continue }
                 var n = b
                 n.fill = m.fill; n.pressedFill = m.pressedFill; n.border = m.border; n.borderWidth = m.borderWidth
-                n.opacity = m.opacity; n.haptic = m.haptic; n.sound = m.sound; n.hapticPattern = m.hapticPattern
+                // Buttons that float over a full-screen picture stay see-through.
+                n.opacity = layout.screen.h > 0.95 ? min(m.opacity, b.opacity) : m.opacity
+                n.haptic = m.haptic; n.sound = m.sound; n.hapticPattern = m.hapticPattern
                 if b.input.symbolColor == nil { n.labelColor = m.labelColor }
                 if b.input.isDirectional { n.dpadStyle = m.dpadStyle }
                 if m.input == b.input { n.imageData = m.imageData; n.pressedImageData = m.pressedImageData }

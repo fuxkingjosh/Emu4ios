@@ -158,7 +158,12 @@ extension ControllerSkin {
         let maxW = 0.58, maxH = 0.88
         var w = maxW, h = w / aspect * phoneRatio
         if h > maxH { h = maxH; w = h * aspect / phoneRatio }
-        let screen = NormRect(x: (1 - w) / 2, y: 0.03 + (maxH - h) / 2 * 0.3, w: w, h: h)
+        var screen = NormRect(x: (1 - w) / 2, y: 0.03 + (maxH - h) / 2 * 0.3, w: w, h: h)
+        if fullScreenLandscape(system) {
+            // Like a real PSP: the picture fills the whole height and the controls float over it.
+            let fh = 1.0, fw = min(1.0, fh * aspect / phoneRatio)
+            screen = NormRect(x: (1 - fw) / 2, y: 0, w: fw, h: fh)
+        }
         var buttons: [ButtonSpec] = []
 
         // Shoulders in the top corners.
@@ -212,7 +217,15 @@ extension ControllerSkin {
         buttons.append(pill(.menu, NormRect(x: 0.46, y: 0.90, w: 0.08, h: 0.08), size: 13))
         buttons.append(pill(.fastForward, NormRect(x: 0.60, y: 0.90, w: 0.07, h: 0.08), size: 13))
         buttons.append(pill(.rewind, NormRect(x: 0.33, y: 0.90, w: 0.07, h: 0.08), size: 13))
+        if fullScreenLandscape(system) {
+            for i in buttons.indices { buttons[i].opacity = 0.45 }
+        }
         return ControllerLayout(screen: screen, buttons: buttons)
+    }
+
+    /// Wide-screen and 3D consoles play full screen when the phone is sideways.
+    static func fullScreenLandscape(_ system: GameSystem) -> Bool {
+        [.psp, .ps1, .n64].contains(system)
     }
 
     // MARK: Face clusters
