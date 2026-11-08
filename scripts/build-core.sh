@@ -61,12 +61,13 @@ build_make() { # slice sdk target
   local sdkpath; sdkpath="$(xcrun --sdk "$sdk" --show-sdk-path)"
   local cc="$(xcrun -f clang) -target $target -isysroot $sdkpath $CCEXTRA"
   local cxx="$(xcrun -f clang++) -target $target -isysroot $sdkpath $CCEXTRA"
+  local ccas="$(xcrun -f clang) -target $target -isysroot $sdkpath" # no extra flags for assembly
   make -C "$WORK/src/$DIR" -f "$MK" clean >/dev/null 2>&1 || true
   find "$WORK/src" -name "*.dylib" -delete
   touch "$WORK/build-$slice.log.start"; sleep 1
   # shellcheck disable=SC2086
   make -C "$WORK/src/$DIR" -f "$MK" platform=ios-arm64 IOSSDK="$sdkpath" MINVERSION= \
-    CC="$cc" CXX="$cxx" CC_AS="$cc" AS="$cc" LD="$cxx" $ARGS -j "$JOBS" > "$WORK/build-$slice.log" 2>&1 \
+    CC="$cc" CXX="$cxx" CC_AS="$ccas" AS="$ccas" LD="$cxx" $ARGS -j "$JOBS" > "$WORK/build-$slice.log" 2>&1 \
     || { echo "---- errors ----"; grep -E -A4 "error:|Undefined symbols" "$WORK/build-$slice.log" | head -80; echo "---- end of log ----"; tail -25 "$WORK/build-$slice.log"; exit 1; }
   local lib; lib="$(find "$WORK/src" -maxdepth 5 -name "*.dylib" -newer "$WORK/build-$slice.log.start" 2>/dev/null | head -1)"
   [ -n "$lib" ] || { echo "no dylib produced for $ID ($slice)"; tail -30 "$WORK/build-$slice.log"; exit 1; }
