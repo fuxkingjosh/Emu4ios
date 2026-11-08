@@ -429,13 +429,16 @@ enum GameSystem: String, Codable, CaseIterable, Identifiable {
 
     static var allExtensions: [String] { Array(Set(allCases.flatMap(\.fileExtensions)).union(sharedExtensions)) }
 
-    /// Systems whose core shipped in this build (cores that failed to build are left out).
-    static var available: [GameSystem] {
-        allCases.filter { system in
-            guard let fw = system.coreFramework else { return true }
-            return CoreRegistry.isAvailable(fw)
-        }
-    }
+    /// Heavy or not-yet-polished systems, hidden unless Settings → Consoles → Experimental Consoles is on.
+    var isExperimental: Bool { [.psp, .n64, .jaguar, .c64, .amiga, .dos, .doom].contains(self) }
+
+    static var showExperimental: Bool { UserDefaults.standard.bool(forKey: "showExperimentalConsoles") }
+
+    /// Shown and playable right now: the core is in this build, and it isn't a hidden experimental one.
+    var isEnabled: Bool { isAvailable && (!isExperimental || Self.showExperimental) }
+
+    /// Systems you can play (cores that failed to build and hidden experimental ones are left out).
+    static var available: [GameSystem] { allCases.filter(\.isEnabled) }
 
     var isAvailable: Bool { coreFramework.map(CoreRegistry.isAvailable) ?? true }
 }

@@ -3,6 +3,7 @@ import SwiftUI
 /// Every console Emu4ios plays, with its emulator settings and BIOS status.
 struct ConsoleSettingsView: View {
     @EnvironmentObject var library: GameLibrary
+    @AppStorage("showExperimentalConsoles") private var showExperimental = false
 
     var body: some View {
         List {
@@ -10,11 +11,19 @@ struct ConsoleSettingsView: View {
                 Text("Put BIOS and firmware files in Files → Emu4ios → BIOS. Most consoles don't need any.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
+            Section {
+                Toggle("Experimental Consoles", isOn: $showExperimental)
+            } footer: {
+                Text("PSP, Nintendo 64, Atari Jaguar, Commodore 64, Amiga, DOS and DOOM. They need a lot of power or still have known problems, so they're off until they're ready.")
+            }
             ForEach(GameSystem.Maker.allCases, id: \.self) { maker in
+                let systems = GameSystem.allCases.filter { $0.maker == maker && (showExperimental || !$0.isExperimental) }
+                if !systems.isEmpty {
                 Section(maker.rawValue) {
-                    ForEach(GameSystem.allCases.filter { $0.maker == maker }) { system in
+                    ForEach(systems) { system in
                         NavigationLink { ConsoleDetailView(system: system) } label: { row(system) }
                     }
+                }
                 }
             }
         }

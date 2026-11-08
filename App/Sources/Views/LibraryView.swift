@@ -18,6 +18,7 @@ struct LibraryView: View {
 
     private var filtered: [Game] {
         library.games
+            .filter { $0.system.isEnabled }
             .filter { filter == nil || $0.system == filter }
             .filter { !favoritesOnly || $0.favorite }
             .filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }
@@ -122,7 +123,7 @@ struct LibraryView: View {
                 chip(theme.label(.allGames), selected: filter == nil && !favoritesOnly) { filter = nil; favoritesOnly = false }
                 chip(theme.label(.favorites), selected: favoritesOnly) { favoritesOnly.toggle() }
                 // Only consoles you have games for.
-                ForEach(GameSystem.allCases.filter { s in library.games.contains { $0.system == s } }) { system in
+                ForEach(GameSystem.available.filter { s in library.games.contains { $0.system == s } }) { system in
                     chip(system.shortName, selected: filter == system) { filter = filter == system ? nil : system }
                 }
             }

@@ -54,6 +54,9 @@ enum EmulatorCores {
 
     /// Why a game couldn't start, shown to the player.
     static func problem(for system: GameSystem) -> String? {
+        if system.isExperimental && !GameSystem.showExperimental {
+            return "\(system.name) is experimental and turned off. You can turn it on in Settings → Consoles & BIOS."
+        }
         if let fw = system.coreFramework, CoreRegistry.path(for: fw) == nil {
             return "The \(system.name) emulator isn't in this build of Emu4ios."
         }

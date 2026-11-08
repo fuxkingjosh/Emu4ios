@@ -60,7 +60,7 @@ final class GameLibrary: ObservableObject {
     }
 
     var recentlyPlayed: [Game] {
-        games.filter { $0.lastPlayed != nil }.sorted { ($0.lastPlayed ?? .distantPast) > ($1.lastPlayed ?? .distantPast) }
+        games.filter { $0.lastPlayed != nil && $0.system.isEnabled }.sorted { ($0.lastPlayed ?? .distantPast) > ($1.lastPlayed ?? .distantPast) }
     }
 
     var totalPlayTime: Double { games.reduce(0) { $0 + $1.playTimeSeconds } }
@@ -115,7 +115,10 @@ final class GameLibrary: ObservableObject {
             let destination = uniqueDestination(for: url.lastPathComponent)
             do {
                 try FileManager.default.copyItem(at: url, to: destination)
-                if let system = SystemDetector.detect(destination) {
+                if let system = SystemDetector.detect(destination), !system.isEnabled {
+                    try? FileManager.default.removeItem(at: destination)
+                    skipped.append("\(url.lastPathComponent) (\(system.shortName) is turned off)")
+                } else if let system = SystemDetector.detect(destination) {
                     add(fileName: destination.lastPathComponent, system: system)
                     added += 1
                 } else {
