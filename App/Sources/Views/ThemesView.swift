@@ -47,14 +47,15 @@ struct ThemesView: View {
                         Button { editing = themes.duplicate(themes.active) } label: {
                             Label("New Theme from Current", systemImage: "plus")
                         }
-                        Button { showFileImporter = true } label: { Label("Import Theme File", systemImage: "doc") }
+                        Button { showFileImporter = true } label: { Label("Import Theme or Delta Skin", systemImage: "doc") }
                         Button { showPasteLink = true } label: { Label("Paste Theme Link", systemImage: "link") }
                     } label: {
                         Image(systemName: "plus.circle.fill").font(.title3)
                     }
                 }
             }
-            .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.e4theme, .json]) { result in
+            .fileImporter(isPresented: $showFileImporter,
+                          allowedContentTypes: [.e4theme, .json, UTType(filenameExtension: "deltaskin") ?? .zip, .zip]) { result in
                 guard case .success(let url) = result else { return }
                 router.handle(url, library: library, themes: themes)
             }

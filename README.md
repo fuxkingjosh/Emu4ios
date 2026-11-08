@@ -2,7 +2,7 @@
 
 A free, fully customizable retro game emulator for iPhone and iPad.
 
-**Systems:** Game Boy · Game Boy Color · Game Boy Advance · PlayStation (more coming)
+**33 systems, every feature free:** Game Boy · Game Boy Color · Game Boy Advance · NES / Famicom · Super Nintendo · Nintendo 64 · Nintendo DS · Virtual Boy · Pokémon mini · Genesis / Mega Drive · Sega CD · Master System · Game Gear · SG-1000 · PlayStation · PSP · TurboGrafx-16 / PC Engine (+CD) · SuperGrafx · Neo Geo Pocket (Color) · WonderSwan (Color) · Atari 2600 / 5200 / 7800 / Lynx / Jaguar · Commodore 64 · Amiga · MS-DOS · DOOM
 
 ## Features
 
@@ -18,7 +18,14 @@ A free, fully customizable retro game emulator for iPhone and iPad.
 - **Play stats** and a **"Continue Playing" Home Screen widget**
 - **iCloud sync** for saves, states and themes
 - **Custom app icons**
-- **Bluetooth controllers and keyboards**
+- **Bluetooth controllers and keyboards** — up to four players
+- **RetroAchievements** with hardcore mode, pop-ups, progress and leaderboards
+- **Cheat library**: about 22,000 games' cheats from the libretro database, one tap to add
+- **Local multiplayer**: friends nearby use their own iPhone as player 2–4 (no internet needed)
+- **TV mode**: AirPlay or HDMI shows the game full screen while the phone is the controller
+- **Delta skin import**: `.deltaskin` files become Emu4ios themes
+- **Smart import**: works out the console from inside the file (.bin/.iso/.cue/.chd/.pbp), unpacks .zip archives, WebDAV server downloads
+- **DS touch screen**, analog sticks (N64/PSP), and a full keyboard + trackpad mouse for DOS, C64 and Amiga
 
 Emu4ios includes **no games**. Players import their own game files.
 
@@ -29,8 +36,10 @@ Emu4ios includes **no games**. Players import their own game files.
 | SwiftUI app | `App/Sources` |
 | C bridge to the emulator core | `App/Bridge/E4Emulator.{h,c}` |
 | mGBA core (GB/GBC/GBA, MPL-2.0), built for iOS | `scripts/build-mgba.sh` |
-| PCSX-ReARMed core (PlayStation, GPL-2.0+), built for iOS | `scripts/build-pcsx.sh` |
-| libretro bridge (runs libretro cores) | `App/Bridge/E4Libretro.{h,c}` |
+| 23 libretro cores (list, licenses and pinned versions) | `cores/cores.json`, built by `scripts/build-core.sh` |
+| libretro bridge: loads cores with dlopen, OpenGL ES for N64/PSP, all input types | `App/Bridge/E4Libretro.{h,c}`, `E4GL.{h,m}` |
+| RetroAchievements (rcheevos, MIT) | `App/Bridge/rcheevos`, `App/Bridge/E4Achievements.{h,c}` |
+| Linux test harness for cores | `Tests/core_test.c`, `Tests/make_test_roms.py` |
 | Xcode project (generated) | `project.yml` (XcodeGen) |
 | Home Screen widget | `Widget/` |
 | Cloud Mac builds | `.github/workflows/build.yml` |

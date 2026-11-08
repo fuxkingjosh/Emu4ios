@@ -65,6 +65,7 @@ struct GameView: View {
     @EnvironmentObject var library: GameLibrary
     @EnvironmentObject var gestures: GestureSettings
     @StateObject private var physical = PhysicalInput()
+    @ObservedObject private var tv = ExternalDisplay.shared
     @ObservedObject private var layouts = LayoutStore.shared
     @Environment(\.scenePhase) private var scenePhase
     @State private var controllerHidden = false
@@ -87,10 +88,21 @@ struct GameView: View {
                     Color.black.ignoresSafeArea()
                 }
 
-                StyledGameScreen(frame: session.loop.frame, system: session.game.system, style: theme.screen,
-                                 accent: theme.style.accent.color)
-                    .frame(width: screenRect.width, height: screenRect.height)
-                    .offset(x: screenRect.minX, y: screenRect.minY)
+                Group {
+                    if tv.connected {
+                        VStack(spacing: 8) {
+                            Image(systemName: "tv").font(.system(size: 40))
+                            Text("Playing on your TV").font(.headline)
+                        }
+                        .foregroundStyle(.white.opacity(0.7))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        StyledGameScreen(frame: session.loop.frame, system: session.game.system, style: theme.screen,
+                                         accent: theme.style.accent.color)
+                    }
+                }
+                .frame(width: screenRect.width, height: screenRect.height)
+                .offset(x: screenRect.minX, y: screenRect.minY)
 
                 screenInputLayer(size: screenRect.size)
                     .frame(width: screenRect.width, height: screenRect.height)
@@ -120,6 +132,10 @@ struct GameView: View {
                 statusBadges
                     .position(x: geo.size.width / 2, y: max(screenRect.minY, 0) + 22)
 
+                AchievementPopups()
+                    .frame(width: geo.size.width)
+                    .padding(.top, 48)
+
                 if let toast = session.toast {
                     Text(toast)
                         .font(theme.style.font(.subheadline, weight: .semibold))
@@ -141,7 +157,11 @@ struct GameView: View {
         .fullScreenCover(isPresented: $editingLayout, onDismiss: { session.closeMenu() }) {
             ThemeLayoutEditorLauncher(themeID: theme.id, system: session.game.system, gameID: session.game.id)
         }
-        .onAppear(perform: connectPhysicalInput)
+        .onAppear {
+            connectPhysicalInput()
+            tv.game = (session.loop.frame, session.game.system, theme.screen)
+        }
+        .onDisappear { tv.game = nil }
         .background(ShakeDetector { if !session.isMenuOpen { handle(gestures.action(for: .shake)) } }.frame(width: 1, height: 1))
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { session.resume() } else { session.pause() }

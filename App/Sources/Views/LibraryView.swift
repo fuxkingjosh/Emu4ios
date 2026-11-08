@@ -7,6 +7,7 @@ struct LibraryView: View {
     @EnvironmentObject var themes: ThemeStore
     @EnvironmentObject var router: AppRouter
     @State private var showImporter = false
+    @State private var showWebDAV = false
     @State private var search = ""
     @State private var filter: GameSystem?
     @State private var favoritesOnly = false
@@ -50,8 +51,13 @@ struct LibraryView: View {
             .searchable(text: $search, prompt: theme.label(.search))
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button { showImporter = true } label: { Image(systemName: "plus.circle.fill").font(.title3) }
-                        .accessibilityLabel(theme.label(.importGames))
+                    Menu {
+                        Button { showImporter = true } label: { Label("Import from Files", systemImage: "folder") }
+                        Button { showWebDAV = true } label: { Label("Download from a Server (WebDAV)", systemImage: "server.rack") }
+                    } label: {
+                        Image(systemName: "plus.circle.fill").font(.title3)
+                    }
+                    .accessibilityLabel(theme.label(.importGames))
                 }
             }
             .fileImporter(isPresented: $showImporter,
@@ -60,6 +66,7 @@ struct LibraryView: View {
                 if case .success(let urls) = result { library.importFiles(urls) }
             }
             .sheet(item: $editing) { game in GameDetailSheet(gameID: game.id) }
+            .sheet(isPresented: $showWebDAV) { WebDAVBrowserView() }
             .confirmationDialog("Which console is \(library.needsSystemChoice.first ?? "this game") for?",
                                 isPresented: Binding(get: { !library.needsSystemChoice.isEmpty },
                                                      set: { if !$0, !library.needsSystemChoice.isEmpty { library.needsSystemChoice.removeFirst() } }),

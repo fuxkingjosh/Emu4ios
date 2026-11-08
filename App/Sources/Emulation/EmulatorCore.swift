@@ -17,6 +17,8 @@ protocol EmulatorCore: AnyObject {
     func sendKey(_ event: KeyEvent)
     /// Draws with OpenGL ES (N64, PSP).
     var usesGPU: Bool { get }
+    /// Starts RetroAchievements for this game (reads the emulator's memory each frame).
+    func loadAchievements(consoleID: UInt32, path: String)
     func runFrame()
     func reset()
     /// Calls `body` with the current frame: RGBX pixels, width, height, row stride in pixels.
@@ -169,6 +171,7 @@ final class MGBACore: EmulatorCore {
     func addCheat(name: String, code: String) -> Bool { e4_add_cheat(handle, name, code) }
     func clearCheats() { e4_clear_cheats(handle) }
     func flushSave() {} // mGBA writes battery saves straight to the file
+    func loadAchievements(consoleID: UInt32, path: String) { e4ra_load_game_mgba(consoleID, path, handle) }
 }
 
 // MARK: - libretro cores (every other system)
@@ -227,6 +230,8 @@ final class LibretroCore: EmulatorCore {
         e4lr_set_pointer(handle, input.pointer.x, input.pointer.y, input.pointerDown)
         e4lr_mouse(handle, input.mouseDelta.x, input.mouseDelta.y, input.mouseLeft, input.mouseRight)
     }
+
+    func loadAchievements(consoleID: UInt32, path: String) { e4ra_load_game_libretro(consoleID, path, handle) }
 
     func sendKey(_ event: KeyEvent) {
         e4lr_key(handle, event.code, event.down, event.character, event.modifiers)

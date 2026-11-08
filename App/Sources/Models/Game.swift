@@ -15,6 +15,8 @@ struct Game: Codable, Identifiable, Hashable {
     /// Theme to use only for this game (nil = use the system/global theme).
     var themeOverrideID: String?
     var cheats: [Cheat] = []
+    /// Official name from the game database (e.g. "Pokemon - Emerald Version (USA, Europe)"), once identified.
+    var databaseName: String?
 
     var formattedPlayTime: String {
         let total = Int(playTimeSeconds)

@@ -27,9 +27,12 @@ final class EmulatorSession: ObservableObject {
     static let quickSlot = 10
     static let autoSlot = 0
 
+    let romURL: URL
+
     init?(game: Game, romURL: URL) {
         guard let core = EmulatorCores.make(system: game.system, romURL: romURL, saveURL: AppPaths.saveFile(for: game)) else { return nil }
         self.game = game
+        self.romURL = romURL
         loop = EmulationLoop(core: core)
         loop.rewindEnabled = UserDefaults.standard.object(forKey: "rewindEnabled") as? Bool ?? true
         applyCheats(game.cheats)
@@ -38,10 +41,25 @@ final class EmulatorSession: ObservableObject {
 
     // MARK: Lifecycle
 
+    /// Hardcore RetroAchievements forbid save states, rewind, cheats and slow motion.
+    private var hardcoreLocked: Bool {
+        let ra = Achievements.shared
+        return ra.hardcore && ra.isLoggedIn && ra.enabled && e4ra_console_id(game.system.rawValue) != 0
+    }
+
     func start(resumeAutoSave: Bool) {
-        if resumeAutoSave, let auto = saveStates.first(where: { $0.isAuto }) {
+        if resumeAutoSave, !hardcoreLocked, let auto = saveStates.first(where: { $0.isAuto }) {
             _ = core.loadState(from: auto.url)
         }
+        Achievements.shared.onResetRequested = { [weak self] in self?.restart() }
+        ControllerLink.shared.onInput = { [weak self] port, buttons, left, right in
+            guard let self else { return }
+            self.setPhysicalButtons(buttons, port: port)
+            self.setStick(.leftStick, x: left.x, y: left.y, port: port)
+            self.setStick(.rightStick, x: right.x, y: right.y, port: port)
+        }
+        Achievements.shared.gameStarted(core: core, romURL: romURL)
+        if hardcoreLocked { loop.rewindEnabled = false }
         ClipRecorder.shared.begin(system: game.system, fps: core.fps, sampleRate: AudioOutput.outputRate)
         loop.start()
         loop.paused = false
@@ -58,6 +76,9 @@ final class EmulatorSession: ObservableObject {
         CloudSync.shared.didChangeFile(AppPaths.saveFile(for: game), kind: .save)
         ClipRecorder.shared.end()
         LiveActivityController.shared.end()
+        Achievements.shared.gameEnded()
+        if ControllerLink.shared.hosting { ControllerLink.shared.stop() }
+        ControllerLink.shared.onInput = nil
         return (seconds, image)
     }
 
@@ -167,12 +188,14 @@ final class EmulatorSession: ObservableObject {
     }
 
     func setSpeed(_ value: Double) {
+        if value < 1 && hardcoreLocked { showToast("Slow motion is off in Hardcore mode"); return }
         isFastForwarding = value != 1
         if value != 1 { speedPreset = value }
         loop.speed = value
     }
 
     func setRewinding(_ on: Bool) {
+        if on && hardcoreLocked { showToast("Rewind is off in Hardcore mode"); return }
         guard loop.rewindEnabled else {
             if on { showToast("Rewind is off in Settings") }
             return
@@ -205,6 +228,7 @@ final class EmulatorSession: ObservableObject {
 
     @discardableResult
     func loadState(_ info: SaveStateInfo) -> Bool {
+        if hardcoreLocked { showToast("Loading save states is off in Hardcore mode"); return false }
         let ok = loop.perform { core in core.loadState(from: info.url) }
         loop.clearRewind()
         showToast(ok ? "Loaded" : "Couldn't load that save state")
@@ -239,7 +263,7 @@ final class EmulatorSession: ObservableObject {
     }
 
     func restart() {
-        loop.perform { core in core.reset() }
+        loop.perform { core in core.reset(); e4ra_reset() }
         loop.clearRewind()
         closeMenu()
     }
@@ -247,7 +271,7 @@ final class EmulatorSession: ObservableObject {
     // MARK: Cheats
 
     func applyCheats(_ cheats: [Cheat]) {
-        let active = cheats.filter(\.enabled)
+        let active = hardcoreLocked ? [] : cheats.filter(\.enabled)
         loop.perform { core in
             core.clearCheats()
             for cheat in active { core.addCheat(name: cheat.name, code: cheat.code) }

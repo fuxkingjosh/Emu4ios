@@ -84,6 +84,7 @@ final class EmulationLoop: @unchecked Sendable {
     private let exited = DispatchSemaphore(value: 0)
     private var rewind: RewindBuffer
     private var frameCount: UInt64 = 0
+    private var idleTicks: UInt64 = 0
     private(set) var activePlaySeconds: Double = 0
 
     init(core: EmulatorCore) {
@@ -216,6 +217,8 @@ final class EmulationLoop: @unchecked Sendable {
             if isPaused {
                 lastTick = now
                 next = now
+                idleTicks &+= 1
+                if idleTicks % 100 == 0 { e4ra_idle() } // keeps RetroAchievements' connection alive
                 Thread.sleep(forTimeInterval: 0.01)
                 continue
             }
@@ -244,6 +247,7 @@ final class EmulationLoop: @unchecked Sendable {
                     if i > 0 { frameInput.mouseDelta = .zero } // mouse movement counts once
                     core.setInput(frameInput)
                     core.runFrame()
+                    e4ra_do_frame()
                     frameCount &+= 1
                     let produced = audioScratch.withUnsafeMutableBufferPointer {
                         core.readAudio(into: $0.baseAddress!, maxFrames: 4_096)

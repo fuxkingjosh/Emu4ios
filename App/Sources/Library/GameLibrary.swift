@@ -40,6 +40,8 @@ final class GameLibrary: ObservableObject {
             findingArt.remove(game.id)
             guard var current = self.game(id: game.id) else { return }
             if let match {
+                current.databaseName = match.databaseName
+                update(current)
                 // Only replace the title if the user hasn't renamed the game.
                 if current.title == Self.prettyTitle(from: current.fileName) || manual {
                     current.title = match.cleanTitle

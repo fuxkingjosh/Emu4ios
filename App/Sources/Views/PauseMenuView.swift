@@ -68,6 +68,16 @@ struct PauseMenuView: View {
 
                 Section {
                     NavigationLink {
+                        AchievementListView()
+                    } label: {
+                        Label("Achievements", systemImage: "trophy")
+                    }
+                    NavigationLink {
+                        InvitePlayersView(system: session.game.system)
+                    } label: {
+                        Label("Invite Players", systemImage: "person.2.wave.2")
+                    }
+                    NavigationLink {
                         CheatsEditor(gameID: session.game.id, session: session)
                     } label: {
                         Label(theme.label(.cheats), systemImage: "wand.and.stars")
@@ -194,6 +204,20 @@ struct CheatsEditor: View {
 
     var body: some View {
         Form {
+            if let game {
+                Section {
+                    NavigationLink {
+                        CheatLibraryView(game: game) { name, code in
+                            mutate { $0.cheats.append(Cheat(name: name, code: code, enabled: false)) }
+                            PlayStats.shared.log(.cheatAdded)
+                        }
+                    } label: {
+                        Label("Browse Cheat Library", systemImage: "books.vertical")
+                    }
+                } footer: {
+                    Text("Cheats added from the library start switched off — turn on the ones you want below.")
+                }
+            }
             Section {
                 TextField("Name (e.g. Infinite Health)", text: $name)
                 TextField("Code", text: $code, axis: .vertical)

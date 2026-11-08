@@ -7,15 +7,18 @@ set -euo pipefail
 ID="$1"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MIN_IOS="17.0"
-read -r FW REPO SHA DIR MK ARGS BUILD ASSETS < <(python3 - "$ROOT/cores/cores.json" "$ID" <<'PY'
+read -r FW REPO SHA DIR MK ARGS BUILD ASSETS CCEXTRA < <(python3 - "$ROOT/cores/cores.json" "$ID" <<'PY'
 import json, sys
 c = next(c for c in json.load(open(sys.argv[1]))["cores"] if c["id"] == sys.argv[2])
 print(c["framework"], c["repo"], c["sha"], c.get("dir", "."), c.get("makefile", "Makefile"),
-      c.get("args", "").replace(" ", "|") or "-", c.get("build", "make"), c.get("assets", "-"))
+      c.get("args", "").replace(" ", "|") or "-", c.get("build", "make"), c.get("assets", "-"),
+      c.get("cflags", "").replace(" ", "|") or "-")
 PY
 )
 [ "$ARGS" = "-" ] && ARGS=""
 ARGS="${ARGS//|/ }"
+[ "$CCEXTRA" = "-" ] && CCEXTRA=""
+CCEXTRA="${CCEXTRA//|/ }"
 OUT="$ROOT/Vendor/Cores/$FW.xcframework"
 STAMP="$ROOT/Vendor/Cores/.$ID"
 if [ -d "$OUT" ] && [ "$(cat "$STAMP" 2>/dev/null)" = "$SHA" ]; then echo "$ID already built"; exit 0; fi
@@ -56,15 +59,15 @@ PLIST
 build_make() { # slice sdk target
   local slice="$1" sdk="$2" target="$3"
   local sdkpath; sdkpath="$(xcrun --sdk "$sdk" --show-sdk-path)"
-  local cc="$(xcrun -f clang) -target $target -isysroot $sdkpath"
-  local cxx="$(xcrun -f clang++) -target $target -isysroot $sdkpath"
+  local cc="$(xcrun -f clang) -target $target -isysroot $sdkpath $CCEXTRA"
+  local cxx="$(xcrun -f clang++) -target $target -isysroot $sdkpath $CCEXTRA"
   make -C "$WORK/src/$DIR" -f "$MK" clean >/dev/null 2>&1 || true
   find "$WORK/src" -name "*.dylib" -delete
   touch "$WORK/build-$slice.log.start"; sleep 1
   # shellcheck disable=SC2086
   make -C "$WORK/src/$DIR" -f "$MK" platform=ios-arm64 IOSSDK="$sdkpath" MINVERSION= \
-    CC="$cc" CXX="$cxx" CC_AS="$cc" AS="$cc" LD="$cc" $ARGS -j "$JOBS" > "$WORK/build-$slice.log" 2>&1 \
-    || { tail -60 "$WORK/build-$slice.log"; exit 1; }
+    CC="$cc" CXX="$cxx" CC_AS="$cc" AS="$cc" LD="$cxx" $ARGS -j "$JOBS" > "$WORK/build-$slice.log" 2>&1 \
+    || { echo "---- errors ----"; grep -E -A4 "error:|Undefined symbols" "$WORK/build-$slice.log" | head -80; echo "---- end of log ----"; tail -25 "$WORK/build-$slice.log"; exit 1; }
   local lib; lib="$(find "$WORK/src" -maxdepth 5 -name "*.dylib" -newer "$WORK/build-$slice.log.start" 2>/dev/null | head -1)"
   [ -n "$lib" ] || { echo "no dylib produced for $ID ($slice)"; tail -30 "$WORK/build-$slice.log"; exit 1; }
   make_framework "$lib" "$slice"

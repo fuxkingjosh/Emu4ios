@@ -43,12 +43,17 @@ jobs:
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
+      - name: Cache key (this core's settings + the build script)
+        id: key
+        run: |
+          entry=$(python3 -c 'import json,sys;print(json.dumps(next(c for c in json.load(open("cores/cores.json"))["cores"] if c["id"]==sys.argv[1]),sort_keys=True))' "${{ matrix.core }}")
+          echo "hash=$( (echo "$entry"; cat scripts/build-core.sh) | shasum -a 256 | cut -c1-16)" >> "$GITHUB_OUTPUT"
       - name: Cache core
         id: cache
         uses: actions/cache@v4
         with:
           path: Vendor/Cores
-          key: core-${{ matrix.core }}-${{ hashFiles('cores/cores.json', 'scripts/build-core.sh') }}
+          key: core-${{ matrix.core }}-${{ steps.key.outputs.hash }}
       - name: Build core for iPhone
         if: steps.cache.outputs.cache-hit != 'true'
         run: ./scripts/build-core.sh ${{ matrix.core }}

@@ -691,12 +691,22 @@ static void enter(E4Libretro* lr) {
 #endif
 }
 
+/// After a call made from another thread (save states, cheats…), let go of the GL context so only
+/// one thread ever has it current.
+static void leave(E4Libretro* lr) {
+#ifdef __APPLE__
+    if (lr && lr->gl) e4gl_release_current();
+#else
+    (void) lr;
+#endif
+}
+
 void e4lr_run_frame(E4Libretro* lr) {
     enter(lr);
     api->run();
 }
 
-void e4lr_reset(E4Libretro* lr) { enter(lr); api->reset(); }
+void e4lr_reset(E4Libretro* lr) { enter(lr); api->reset(); leave(lr); }
 
 const uint32_t* e4lr_pixels(const E4Libretro* lr, unsigned* width, unsigned* height) {
     if (width) *width = lr->width;
@@ -717,16 +727,20 @@ size_t e4lr_read_audio(E4Libretro* lr, int16_t* out, size_t maxFrames) {
 
 // MARK: - States
 
-size_t e4lr_state_size(E4Libretro* lr) { enter(lr); return api->serialize_size(); }
+size_t e4lr_state_size(E4Libretro* lr) { enter(lr); size_t n = api->serialize_size(); leave(lr); return n; }
 
 bool e4lr_save_state(E4Libretro* lr, void* buffer, size_t size) {
     enter(lr);
-    return api->serialize(buffer, size);
+    bool ok = api->serialize(buffer, size);
+    leave(lr);
+    return ok;
 }
 
 bool e4lr_load_state(E4Libretro* lr, const void* buffer, size_t size) {
     enter(lr);
-    return api->unserialize(buffer, size);
+    bool ok = api->unserialize(buffer, size);
+    leave(lr);
+    return ok;
 }
 
 bool e4lr_save_state_file(E4Libretro* lr, const char* path) {

@@ -9,6 +9,7 @@ struct Emu4iosApp: App {
 
     init() {
         CloudSync.shared.start()
+        Task { @MainActor in Achievements.shared.start() }
     }
 
     var body: some Scene {
@@ -61,6 +62,14 @@ final class AppRouter: ObservableObject {
             return
         }
         // Files opened from the Files app, AirDrop, Messages…
+        if url.pathExtension.lowercased() == "deltaskin" {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            do { incomingTheme = try DeltaSkinImporter.makeTheme(from: url, base: themes.active) }
+            catch { errorMessage = error.localizedDescription }
+            selectedTab = .themes
+            return
+        }
         if url.pathExtension.lowercased() == "e4theme" {
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }

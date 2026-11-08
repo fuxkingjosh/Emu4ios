@@ -12,6 +12,8 @@ struct SettingsView: View {
     @AppStorage("clipLength") private var clipLength = 30.0
     @AppStorage("cloudSyncEnabled") private var cloudSyncEnabled = true
     @State private var cloudAvailable = CloudSync.shared.isAvailable
+    @State private var showControllerMode = false
+    @AppStorage("tvMode") private var tvMode = true
 
     var body: some View {
         NavigationStack {
@@ -30,6 +32,7 @@ struct SettingsView: View {
                     Toggle("Rewind", isOn: $rewindEnabled)
                     Toggle("Mute With Silent Switch", isOn: $respectSilentSwitch)
                     Toggle("Show on Lock Screen & Dynamic Island", isOn: $liveActivity)
+                    Toggle("Play on TV When Connected", isOn: $tvMode)
                 }
 
                 Section {
@@ -90,6 +93,16 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    NavigationLink { AchievementSettingsView() } label: {
+                        Label("RetroAchievements", systemImage: "trophy")
+                    }
+                } header: {
+                    Text("Achievements")
+                } footer: {
+                    Text("Earn achievements in thousands of classic games with a free RetroAchievements account.")
+                }
+
+                Section {
                     NavigationLink { ConsoleSettingsView() } label: {
                         Label("Consoles & BIOS", systemImage: "gamecontroller")
                     }
@@ -97,6 +110,16 @@ struct SettingsView: View {
                     Text("Consoles")
                 } footer: {
                     Text("\(GameSystem.available.count) consoles. Tune resolution and other options, and check BIOS files.")
+                }
+
+                Section {
+                    Button { showControllerMode = true } label: {
+                        Label("Be a Controller for a Friend", systemImage: "iphone.gen3.radiowaves.left.and.right")
+                    }
+                } header: {
+                    Text("Multiplayer")
+                } footer: {
+                    Text("Use this iPhone as player 2, 3 or 4 for a game running on a phone nearby — no internet needed.")
                 }
 
                 Section("Controllers & Keyboards") {
@@ -110,6 +133,7 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle(themes.active.label(.settingsTitle))
+            .fullScreenCover(isPresented: $showControllerMode) { ControllerModeView() }
             .onAppear { cloudAvailable = CloudSync.shared.isAvailable }
         }
     }

@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Things that count toward daily challenges and badges.
 enum PlayEvent: String, Codable {
-    case saveState, screenshot, clip, themeEdited, themeUploaded, cheatAdded, fastForward, rewind
+    case saveState, screenshot, clip, themeEdited, themeUploaded, cheatAdded, fastForward, rewind, achievement
 }
 
 struct DayRecord: Codable {

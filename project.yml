@@ -131,7 +131,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.fuxkingjosh.emu4ios
         SWIFT_OBJC_BRIDGING_HEADER: App/Bridge/Emu4ios-Bridging-Header.h
-        HEADER_SEARCH_PATHS: $(SRCROOT)/Vendor/mgba-include
+        HEADER_SEARCH_PATHS: "$(SRCROOT)/Vendor/mgba-include $(SRCROOT)/App/Bridge $(SRCROOT)/App/Bridge/rcheevos/include"
+        GCC_PREPROCESSOR_DEFINITIONS: "$(inherited) RC_CLIENT_SUPPORTS_HASH=1"
+        CLANG_ENABLE_OBJC_ARC: YES
         GCC_C_LANGUAGE_STANDARD: gnu11
         "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
@@ -164,6 +166,14 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         UIFileSharingEnabled: true
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleExternalDisplayNonInteractive:
+              - UISceneConfigurationName: TV
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).ExternalDisplaySceneDelegate
+        NSLocalNetworkUsageDescription: Emu4ios finds friends nearby so their iPhones can be extra controllers.
+        NSBonjourServices: [_emu4ios-pad._tcp, _emu4ios-pad._udp]
         LSSupportsOpeningDocumentsInPlace: false
         NSPhotoLibraryAddUsageDescription: Emu4ios saves your gameplay clips and screenshots to Photos.
         GCSupportsControllerUserInteraction: true
@@ -185,6 +195,9 @@ targets:
           - CFBundleTypeName: Retro Game
             LSHandlerRank: Alternate
             LSItemContentTypes: [com.fuxkingjosh.emu4ios.rom]
+          - CFBundleTypeName: Delta Skin
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [com.rileytestut.delta.skin]
           - CFBundleTypeName: Emu4ios Theme
             LSHandlerRank: Owner
             LSItemContentTypes: [com.fuxkingjosh.emu4ios.theme]
@@ -196,6 +209,11 @@ targets:
               public.filename-extension: [e4theme]
               public.mime-type: application/x-emu4ios-theme
         UTImportedTypeDeclarations:
+          - UTTypeIdentifier: com.rileytestut.delta.skin
+            UTTypeDescription: Delta Skin
+            UTTypeConformsTo: [public.zip-archive]
+            UTTypeTagSpecification:
+              public.filename-extension: [deltaskin]
           - UTTypeIdentifier: com.fuxkingjosh.emu4ios.rom
             UTTypeDescription: Retro Game
             UTTypeConformsTo: [public.data]
