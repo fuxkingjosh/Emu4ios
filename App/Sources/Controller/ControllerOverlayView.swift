@@ -283,7 +283,9 @@ final class ControllerTouchView: UIView {
     // MARK: Feedback
 
     private func feedback(_ spec: ButtonSpec) {
-        if skin?.hapticsEnabled ?? true, spec.haptic != .off {
+        if skin?.hapticsEnabled ?? true, let pattern = spec.hapticPattern, !pattern.isEmpty {
+            HapticPlayer.shared.play(pattern)
+        } else if skin?.hapticsEnabled ?? true, spec.haptic != .off {
             let generator = generators[spec.haptic] ?? {
                 let style: UIImpactFeedbackGenerator.FeedbackStyle
                 switch spec.haptic {

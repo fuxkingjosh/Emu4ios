@@ -5,6 +5,7 @@ struct StatsView: View {
     @EnvironmentObject var library: GameLibrary
     @EnvironmentObject var themes: ThemeStore
     @EnvironmentObject var router: AppRouter
+    @ObservedObject private var stats = PlayStats.shared
 
     private var style: AppStyle { themes.active.style }
     private var ranked: [Game] { library.games.filter { $0.playTimeSeconds > 0 }.sorted { $0.playTimeSeconds > $1.playTimeSeconds } }
@@ -15,6 +16,10 @@ struct StatsView: View {
                 ThemeBackground(style: themes.active.background)
                 ScrollView {
                     VStack(spacing: 16) {
+                        dailyCard
+                        challengeCard
+                        weekCard
+                        badgesCard
                         HStack(spacing: 12) {
                             statTile("Total Play Time", value: format(library.totalPlayTime), icon: "clock.fill")
                             statTile("Games", value: "\(library.games.count)", icon: "square.stack.fill")
@@ -66,6 +71,99 @@ struct StatsView: View {
                 }
             }
             .navigationTitle(themes.active.label(.statsTitle))
+        }
+    }
+
+    // MARK: Daily
+
+    private var dailyCard: some View {
+        card {
+            HStack(spacing: 18) {
+                ZStack {
+                    Circle().stroke(style.accent.color.opacity(0.2), lineWidth: 12)
+                    Circle().trim(from: 0, to: stats.goalProgress)
+                        .stroke(style.accent.color.gradient, style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .animation(.spring, value: stats.goalProgress)
+                    VStack(spacing: 0) {
+                        Text("\(stats.todayMinutes)").font(style.font(.title, weight: .heavy)).foregroundStyle(style.primaryText.color)
+                        Text("of \(stats.goalMinutes) min").font(style.font(.caption2)).foregroundStyle(style.secondaryText.color)
+                    }
+                }
+                .frame(width: 104, height: 104)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Today's Goal").font(style.font(.headline, weight: .bold)).foregroundStyle(style.primaryText.color)
+                    Label("\(stats.goalStreak)-day streak", systemImage: "flame.fill")
+                        .font(style.font(.subheadline, weight: .semibold))
+                        .foregroundStyle(stats.goalStreak > 0 ? .orange : style.secondaryText.color)
+                    Text("Best: \(stats.bestStreak) days").font(style.font(.caption)).foregroundStyle(style.secondaryText.color)
+                    Stepper("Goal \(stats.goalMinutes) min", value: $stats.goalMinutes, in: 5...180, step: 5)
+                        .font(style.font(.caption)).foregroundStyle(style.primaryText.color)
+                }
+            }
+        }
+    }
+
+    private var challengeCard: some View {
+        let challenge = stats.todaysChallenge
+        let done = stats.challengeDone
+        return card {
+            HStack(spacing: 14) {
+                Image(systemName: done ? "checkmark.seal.fill" : challenge.icon)
+                    .font(.title2)
+                    .foregroundStyle(done ? .green : style.accent.color)
+                    .frame(width: 36)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("DAILY CHALLENGE").font(style.font(.caption2, weight: .bold)).foregroundStyle(style.accent.color)
+                    Text(challenge.title).font(style.font(.headline, weight: .semibold)).foregroundStyle(style.primaryText.color)
+                    Text(done ? "Done! New challenge tomorrow." : "\(stats.challengesCompleted) challenges completed so far")
+                        .font(style.font(.caption)).foregroundStyle(style.secondaryText.color)
+                }
+                Spacer()
+            }
+        }
+    }
+
+    private var weekCard: some View {
+        card {
+            Text("This Week").font(style.font(.headline, weight: .bold)).foregroundStyle(style.primaryText.color)
+            Chart(Array(stats.lastWeek.enumerated()), id: \.offset) { item in
+                BarMark(x: .value("Day", item.element.label), y: .value("Minutes", item.element.minutes))
+                    .foregroundStyle(item.element.minutes >= Double(stats.goalMinutes) ? style.accent.color : style.accent.color.opacity(0.45))
+                    .cornerRadius(5)
+                RuleMark(y: .value("Goal", stats.goalMinutes))
+                    .foregroundStyle(style.secondaryText.color.opacity(0.6))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            }
+            .chartYAxisLabel("Minutes")
+            .frame(height: 150)
+        }
+    }
+
+    private var badgesCard: some View {
+        card {
+            HStack {
+                Text("Badges").font(style.font(.headline, weight: .bold)).foregroundStyle(style.primaryText.color)
+                Spacer()
+                Text("\(stats.earned.count)/\(PlayStats.badges.count)").font(style.font(.caption)).foregroundStyle(style.secondaryText.color)
+            }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 10)], spacing: 12) {
+                ForEach(PlayStats.badges) { badge in
+                    let got = stats.earned[badge.id] != nil
+                    VStack(spacing: 6) {
+                        Image(systemName: badge.icon)
+                            .font(.title2)
+                            .frame(width: 48, height: 48)
+                            .foregroundStyle(got ? style.background.color : style.secondaryText.color.opacity(0.5))
+                            .background(got ? style.accent.color : style.secondaryText.color.opacity(0.12), in: Circle())
+                        Text(badge.title).font(style.font(.caption2, weight: .bold)).foregroundStyle(style.primaryText.color)
+                            .multilineTextAlignment(.center).lineLimit(2)
+                        Text(badge.detail).font(style.font(.caption2)).foregroundStyle(style.secondaryText.color)
+                            .multilineTextAlignment(.center).lineLimit(2)
+                    }
+                    .opacity(got ? 1 : 0.7)
+                }
+            }
         }
     }
 

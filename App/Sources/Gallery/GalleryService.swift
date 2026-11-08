@@ -172,6 +172,7 @@ final class GalleryService: ObservableObject {
         struct R: Decodable { let id: String }
         let r = try JSONDecoder().decode(R.self, from: try await send("v1/themes", method: "POST", body: body))
         uploadedIDs.insert(r.id)
+        PlayStats.shared.log(.themeUploaded)
         UserDefaults.standard.set(Array(uploadedIDs), forKey: "galleryUploaded")
         return r.id
     }

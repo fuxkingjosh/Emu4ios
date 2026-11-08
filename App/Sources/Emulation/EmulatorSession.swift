@@ -55,6 +55,7 @@ final class EmulatorSession: ObservableObject {
         core.flushSave()
         CloudSync.shared.didChangeFile(AppPaths.saveFile(for: game), kind: .save)
         ClipRecorder.shared.end()
+        LiveActivityController.shared.end()
         return (seconds, image)
     }
 
@@ -64,12 +65,14 @@ final class EmulatorSession: ObservableObject {
     func openMenu() {
         isMenuOpen = true
         loop.paused = true
+        LiveActivityController.shared.setPaused(true)
         refreshSaveStates()
     }
 
     func closeMenu() {
         isMenuOpen = false
         loop.paused = false
+        LiveActivityController.shared.setPaused(false)
     }
 
     // MARK: Input
@@ -123,6 +126,7 @@ final class EmulatorSession: ObservableObject {
 
     func toggleFastForward() {
         isFastForwarding.toggle()
+        if isFastForwarding { PlayStats.shared.log(.fastForward) }
         loop.speed = isFastForwarding ? speedPreset : 1
     }
 
@@ -139,6 +143,7 @@ final class EmulatorSession: ObservableObject {
         }
         isRewinding = on
         loop.rewinding = on
+        if on { PlayStats.shared.log(.rewind) }
     }
 
     // MARK: Save states
@@ -157,6 +162,7 @@ final class EmulatorSession: ObservableObject {
             CloudSync.shared.didChangeFile(shotURL, kind: .state)
         }
         if announce { showToast(ok ? (slot == Self.quickSlot ? "Quick saved" : "Saved to slot \(slot)") : "Couldn't save") }
+        if ok && announce { PlayStats.shared.log(.saveState) }
         refreshSaveStates()
         return ok
     }
@@ -232,12 +238,16 @@ final class EmulatorSession: ObservableObject {
             PHPhotoLibrary.shared().performChanges({ PHAssetChangeRequest.creationRequestForAsset(from: image) }, completionHandler: nil)
         }
         showToast("Screenshot saved")
+        PlayStats.shared.log(.screenshot)
     }
 
     func saveClip() {
         showToast("Saving clip…")
         ClipRecorder.shared.exportLastClip { [weak self] message in
-            Task { @MainActor in self?.showToast(message) }
+            Task { @MainActor in
+                self?.showToast(message)
+                if message.contains("saved") { PlayStats.shared.log(.clip) }
+            }
         }
     }
 

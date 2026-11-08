@@ -51,6 +51,7 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
+        NSSupportsLiveActivities: true
         LSApplicationCategoryType: public.app-category.games
         UILaunchScreen:
           UIColorName: LaunchBackground
@@ -116,6 +117,7 @@ targets:
     sources:
       - path: Widget
       - path: App/Sources/Shared/WidgetShared.swift
+      - path: App/Sources/Shared/PlayActivity.swift
     entitlements:
       path: Widget/Emu4iosWidget.entitlements
       properties:

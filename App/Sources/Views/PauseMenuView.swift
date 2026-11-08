@@ -55,6 +55,15 @@ struct PauseMenuView: View {
                         })) {
                         ForEach(ScreenFilter.allCases) { Text($0.displayName).tag($0) }
                     }
+                    Picker("Frame", selection: Binding(
+                        get: { theme.screen.bezel },
+                        set: { newValue in
+                            var editable = themes.editableTheme(theme, library: library)
+                            editable.screen.bezel = newValue
+                            themes.save(editable)
+                        })) {
+                        ForEach(BezelStyle.allCases) { Text($0.displayName).tag($0) }
+                    }
                 }
 
                 Section {
@@ -231,6 +240,7 @@ struct CheatsEditor: View {
         error = nil
         let label = name.isEmpty ? "Cheat \((game?.cheats.count ?? 0) + 1)" : name
         mutate { $0.cheats.append(Cheat(name: label, code: trimmed)) }
+        PlayStats.shared.log(.cheatAdded)
         name = ""
         code = ""
     }

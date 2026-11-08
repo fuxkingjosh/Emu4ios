@@ -5,6 +5,7 @@ struct SettingsView: View {
     @EnvironmentObject var gestures: GestureSettings
     @AppStorage("autoResume") private var autoResume = true
     @AppStorage("autoCoverArt") private var autoCoverArt = true
+    @AppStorage("liveActivityEnabled") private var liveActivity = true
     @AppStorage("rewindEnabled") private var rewindEnabled = true
     @AppStorage("respectSilentSwitch") private var respectSilentSwitch = true
     @AppStorage("clipsEnabled") private var clipsEnabled = true
@@ -16,6 +17,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
+                    NavigationLink { SavesView() } label: { Label("Saves & Backups", systemImage: "externaldrive") }
                     Toggle("Find Cover Art Automatically", isOn: $autoCoverArt)
                 } header: {
                     Text("Library")
@@ -27,6 +29,7 @@ struct SettingsView: View {
                     Toggle("Resume Where You Left Off", isOn: $autoResume)
                     Toggle("Rewind", isOn: $rewindEnabled)
                     Toggle("Mute With Silent Switch", isOn: $respectSilentSwitch)
+                    Toggle("Show on Lock Screen & Dynamic Island", isOn: $liveActivity)
                 }
 
                 Section {
@@ -89,8 +92,7 @@ struct SettingsView: View {
                 Section {
                     LabeledContent("RetroAchievements", value: themes.active.label(.comingSoon))
                     LabeledContent("Wi-Fi Link Cable", value: themes.active.label(.comingSoon))
-                    LabeledContent("Online Theme Gallery", value: themes.active.label(.comingSoon))
-                    LabeledContent("More Systems", value: themes.active.label(.comingSoon))
+                    LabeledContent("PSP, DS & More Systems", value: themes.active.label(.comingSoon))
                 } header: {
                     Text("On the Way")
                 }

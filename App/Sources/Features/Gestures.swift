@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Gestures on the game screen that trigger app actions. Fully remappable in Settings.
 enum ScreenGesture: String, CaseIterable, Identifiable, Codable {
-    case swipeDown, swipeUp, swipeLeft, swipeRight, twoFingerTap, threeFingerTap, longPress, doubleTap
+    case swipeDown, swipeUp, swipeLeft, swipeRight, twoFingerTap, threeFingerTap, longPress, doubleTap, shake
     var id: String { rawValue }
     var displayName: String {
         switch self {
@@ -14,6 +14,7 @@ enum ScreenGesture: String, CaseIterable, Identifiable, Codable {
         case .threeFingerTap: return "Three-finger tap"
         case .longPress: return "Long press on screen"
         case .doubleTap: return "Double tap on screen"
+        case .shake: return "Shake your phone"
         }
     }
 }
@@ -43,7 +44,7 @@ final class GestureSettings: ObservableObject {
 
     static let defaults: [ScreenGesture: GestureAction] = [
         .swipeDown: .quickSave, .swipeUp: .quickLoad, .swipeLeft: .none, .swipeRight: .fastForward,
-        .twoFingerTap: .menu, .threeFingerTap: .screenshot, .longPress: .none, .doubleTap: .none,
+        .twoFingerTap: .menu, .threeFingerTap: .screenshot, .longPress: .none, .doubleTap: .none, .shake: .quickSave,
     ]
 
     init() {
@@ -55,7 +56,7 @@ final class GestureSettings: ObservableObject {
         }
     }
 
-    func action(for gesture: ScreenGesture) -> GestureAction { mapping[gesture] ?? .none }
+    func action(for gesture: ScreenGesture) -> GestureAction { mapping[gesture] ?? Self.defaults[gesture] ?? .none }
 
     private func save() {
         if let data = try? JSONEncoder().encode(mapping) {

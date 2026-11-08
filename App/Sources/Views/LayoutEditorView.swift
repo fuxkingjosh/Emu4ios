@@ -25,10 +25,17 @@ struct LayoutEditorView: View {
 
     private static let screenID = "__screen__"
 
-    init(theme: Theme, system: GameSystem) {
+    /// When editing from inside a game, changes are saved for that game by default.
+    private let gameID: String?
+    @State private var saveForGameOnly: Bool
+
+    init(theme: Theme, system: GameSystem, gameID: String? = nil) {
         self.system = system
+        self.gameID = gameID
         themeID = theme.id
-        _skin = State(initialValue: theme.controller(for: system))
+        _saveForGameOnly = State(initialValue: gameID != nil)
+        let perGame = MainActor.assumeIsolated { gameID.flatMap { LayoutStore.shared.skin(for: $0) } }
+        _skin = State(initialValue: perGame ?? theme.controller(for: system))
         _background = State(initialValue: theme.background)
         _screenStyle = State(initialValue: theme.screen)
     }
@@ -60,7 +67,7 @@ struct LayoutEditorView: View {
             }
             .padding(.horizontal, 8)
             .background(Color.black.ignoresSafeArea())
-            .navigationTitle("\(system.shortName) Controller")
+            .navigationTitle(gameID != nil && saveForGameOnly ? "This Game's Controller" : "\(system.shortName) Controller")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbar }
             .photosPicker(isPresented: $showPhotoPicker, selection: $pickedPhoto, matching: .images)
@@ -95,7 +102,12 @@ struct LayoutEditorView: View {
                 }
             }
             .sheet(isPresented: $showControllerSettings) {
-                ControllerSettingsSheet(skin: $skin, landscape: landscape, onReset: resetLayout)
+                ControllerSettingsSheet(skin: $skin, landscape: landscape, onReset: resetLayout,
+                                        saveForGameOnly: gameID == nil ? nil : $saveForGameOnly,
+                                        onUseThemeLayout: gameID.map { id in {
+                                            LayoutStore.shared.remove(id)
+                                            if let theme = themes.theme(id: themeID) { skin = theme.controller(for: system) }
+                                        } })
                     .presentationDetents([.medium])
             }
         }
@@ -383,6 +395,11 @@ struct LayoutEditorView: View {
     }
 
     private func save() {
+        PlayStats.shared.log(.themeEdited)
+        if let gameID, saveForGameOnly {
+            LayoutStore.shared.save(skin, for: gameID)
+            return
+        }
         guard var theme = themes.theme(id: themeID) else { return }
         theme = themes.editableTheme(theme)
         theme.controllers[system.rawValue] = skin
@@ -471,6 +488,12 @@ struct ButtonInspector: View {
                     Picker("Vibration", selection: $spec.haptic) {
                         ForEach(HapticStrength.allCases) { Text($0.rawValue.capitalized).tag($0) }
                     }
+                    .disabled(spec.hapticPattern != nil)
+                    NavigationLink {
+                        HapticPatternEditor(pattern: $spec.hapticPattern)
+                    } label: {
+                        LabeledContent("Vibration Pattern", value: spec.hapticPattern == nil ? "Off" : "\(spec.hapticPattern!.count) beats")
+                    }
                     Picker("Sound", selection: $spec.sound) {
                         ForEach(ButtonSound.allCases) { Text($0.rawValue.capitalized).tag($0) }
                     }
@@ -513,11 +536,23 @@ struct ControllerSettingsSheet: View {
     @Binding var skin: ControllerSkin
     let landscape: Bool
     let onReset: () -> Void
+    var saveForGameOnly: Binding<Bool>? = nil
+    var onUseThemeLayout: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             Form {
+                if let saveForGameOnly {
+                    Section {
+                        Toggle("Only for This Game", isOn: saveForGameOnly)
+                        if let onUseThemeLayout {
+                            Button("Use the Theme's Layout Again") { onUseThemeLayout(); dismiss() }
+                        }
+                    } footer: {
+                        Text("On: this layout is remembered just for this game. Off: it changes the theme for every game on this system.")
+                    }
+                }
                 Section("Controller") {
                     ColorPicker("Controller Area Color", selection: Binding(
                         get: { (landscape ? skin.landscape : skin.portrait).deckColor.color },
@@ -589,6 +624,56 @@ struct DecorationInspector: View {
                     }
                 }
             }
+        }
+    }
+}
+
+struct HapticPatternEditor: View {
+    @Binding var pattern: [HapticBeat]?
+
+    private var beats: Binding<[HapticBeat]> {
+        Binding(get: { pattern ?? [] }, set: { pattern = $0.isEmpty ? nil : $0 })
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Button { HapticPlayer.shared.play(pattern ?? []) } label: { Label("Feel It", systemImage: "waveform") }
+                    .disabled(pattern == nil)
+                Menu {
+                    ForEach(HapticPreset.allCases) { preset in
+                        Button(preset.title) { pattern = preset.beats; HapticPlayer.shared.play(preset.beats) }
+                    }
+                } label: { Label("Start From a Preset", systemImage: "list.bullet") }
+                if pattern != nil {
+                    Button("Turn Off Pattern", role: .destructive) { pattern = nil }
+                }
+            } footer: {
+                Text("Build your own vibration out of taps and buzzes. It plays every time you press this button.")
+            }
+            ForEach(Array(beats.wrappedValue.enumerated()), id: \.element.id) { index, _ in
+                Section("Beat \(index + 1)") {
+                    slider("Wait before", beats[index].delay, 0...0.4, "s")
+                    slider("Strength", beats[index].intensity, 0.05...1, "")
+                    slider("Sharpness", beats[index].sharpness, 0...1, "")
+                    slider("Length (0 = tap)", beats[index].duration, 0...0.5, "s")
+                    Button("Remove Beat", role: .destructive) { beats.wrappedValue.remove(at: index) }
+                }
+            }
+            Section {
+                Button { beats.wrappedValue.append(HapticBeat(delay: beats.wrappedValue.isEmpty ? 0 : 0.08)) } label: {
+                    Label("Add Beat", systemImage: "plus")
+                }
+                .disabled(beats.wrappedValue.count >= 12)
+            }
+        }
+        .navigationTitle("Vibration Pattern")
+    }
+
+    private func slider(_ title: String, _ value: Binding<Double>, _ range: ClosedRange<Double>, _ unit: String) -> some View {
+        VStack(alignment: .leading) {
+            Text("\(title): \(value.wrappedValue.formatted(.number.precision(.fractionLength(2))))\(unit)")
+            Slider(value: value, in: range) { editing in if !editing { HapticPlayer.shared.play(pattern ?? []) } }
         }
     }
 }

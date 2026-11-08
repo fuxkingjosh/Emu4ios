@@ -203,7 +203,8 @@ struct BackgroundStyle: Codable, Hashable {
 // MARK: - Game screen
 
 enum ScreenFilter: String, Codable, CaseIterable, Identifiable {
-    case none, smooth, crt, lcdGrid, dmgGreen, pocket, colorCorrect, scanlines
+    // New filters must be added at the end (the shader picks them by position).
+    case none, smooth, crt, lcdGrid, dmgGreen, pocket, colorCorrect, scanlines, sharpSmooth, dotMatrix, vhs, handheldLCD
     var id: String { rawValue }
     var displayName: String {
         switch self {
@@ -215,12 +216,44 @@ enum ScreenFilter: String, Codable, CaseIterable, Identifiable {
         case .pocket: return "Game Boy Pocket"
         case .colorCorrect: return "Handheld Color Correction"
         case .scanlines: return "Scanlines"
+        case .sharpSmooth: return "Sharp but Smooth"
+        case .dotMatrix: return "Dot Matrix"
+        case .vhs: return "VHS Tape"
+        case .handheldLCD: return "Handheld LCD (subpixels)"
         }
     }
     var shaderIndex: Int32 { Int32(ScreenFilter.allCases.firstIndex(of: self) ?? 0) }
 }
 
+enum BezelStyle: String, Codable, CaseIterable, Identifiable {
+    case none, handheld, brick, crtTV, arcade, glass
+    var id: String { rawValue }
+    var displayName: String {
+        switch self {
+        case .none: return "No Frame"
+        case .handheld: return "Handheld Shell"
+        case .brick: return "Classic Brick"
+        case .crtTV: return "CRT TV"
+        case .arcade: return "Arcade Cabinet"
+        case .glass: return "Frosted Glass"
+        }
+    }
+    /// Frame thickness around the screen, as a fraction of the screen's width (left/right/top) and bottom.
+    var thickness: (side: Double, top: Double, bottom: Double) {
+        switch self {
+        case .none: return (0, 0, 0)
+        case .handheld: return (0.09, 0.09, 0.09)
+        case .brick: return (0.10, 0.10, 0.17)
+        case .crtTV: return (0.08, 0.08, 0.10)
+        case .arcade: return (0.05, 0.05, 0.05)
+        case .glass: return (0.045, 0.045, 0.045)
+        }
+    }
+}
+
 struct ScreenStyle: Codable, Hashable {
+    var bezel: BezelStyle = .none
+    var bezelColor = ThemeColor(hex: "#2B2B35")
     var filter: ScreenFilter = .none
     var intensity: Double = 0.6
     var borderColor = ThemeColor(hex: "#00000000")
@@ -286,6 +319,8 @@ extension ScreenStyle {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init()
+        bezel = c.value(.bezel, bezel)
+        bezelColor = c.value(.bezelColor, bezelColor)
         filter = c.value(.filter, filter)
         intensity = c.value(.intensity, intensity)
         borderColor = c.value(.borderColor, borderColor)

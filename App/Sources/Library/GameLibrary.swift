@@ -233,6 +233,7 @@ final class GameLibrary: ObservableObject {
         guard var g = game(id: gameID) else { return }
         g.playTimeSeconds += seconds
         g.sessions += 1
+        PlayStats.shared.recordPlay(game: g, seconds: seconds)
         g.lastPlayed = .now
         update(g)
 

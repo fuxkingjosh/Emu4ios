@@ -93,5 +93,8 @@ struct ContinuePlayingWidget: Widget {
 
 @main
 struct Emu4iosWidgetBundle: WidgetBundle {
-    var body: some Widget { ContinuePlayingWidget() }
+    var body: some Widget {
+        ContinuePlayingWidget()
+        PlayLiveActivity()
+    }
 }

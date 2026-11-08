@@ -23,7 +23,9 @@ struct ThemeEditorView: View {
             .navigationTitle("Edit Theme")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { commit(); dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { commit(); PlayStats.shared.log(.themeEdited); dismiss() }
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Use") { commit(); if let d = draft { themes.activeThemeID = d.id } }
                 }
@@ -180,6 +182,12 @@ struct ThemeEditorView: View {
         Section("Game Screen") {
             Picker("Filter", selection: binding(\.screen.filter)) {
                 ForEach(ScreenFilter.allCases) { Text($0.displayName).tag($0) }
+            }
+            Picker("Frame", selection: binding(\.screen.bezel)) {
+                ForEach(BezelStyle.allCases) { Text($0.displayName).tag($0) }
+            }
+            if draft!.screen.bezel != .none {
+                ColorPicker("Frame Color", selection: colorBinding(\.screen.bezelColor))
             }
             VStack(alignment: .leading) {
                 Text("Filter Strength")

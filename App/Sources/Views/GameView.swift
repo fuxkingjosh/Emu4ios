@@ -32,6 +32,7 @@ struct GameContainerView: View {
                 session = s
                 let resume = UserDefaults.standard.object(forKey: "autoResume") as? Bool ?? true
                 s.start(resumeAutoSave: resume)
+                LiveActivityController.shared.begin(game: game, accentHex: themes.theme(for: game).style.accent.hex)
             } else {
                 failed = true
             }
@@ -57,6 +58,7 @@ struct GameView: View {
     @EnvironmentObject var library: GameLibrary
     @EnvironmentObject var gestures: GestureSettings
     @StateObject private var physical = PhysicalInput()
+    @ObservedObject private var layouts = LayoutStore.shared
     @Environment(\.scenePhase) private var scenePhase
     @State private var controllerHidden = false
     @State private var editingLayout = false
@@ -66,7 +68,7 @@ struct GameView: View {
     var body: some View {
         GeometryReader { geo in
             let isLandscape = geo.size.width > geo.size.height
-            let skin = theme.controller(for: session.game.system)
+            let skin = layouts.skin(for: session.game.id) ?? theme.controller(for: session.game.system)
             let layout = skin.layout(landscape: isLandscape)
             let screenRect = layout.screen.rect(in: geo.size)
             let hideTouch = controllerHidden || (skin.hideWhenControllerConnected && physical.controllerConnected)
@@ -78,7 +80,8 @@ struct GameView: View {
                     Color.black.ignoresSafeArea()
                 }
 
-                StyledGameScreen(frame: session.loop.frame, system: session.game.system, style: theme.screen)
+                StyledGameScreen(frame: session.loop.frame, system: session.game.system, style: theme.screen,
+                                 accent: theme.style.accent.color)
                     .frame(width: screenRect.width, height: screenRect.height)
                     .offset(x: screenRect.minX, y: screenRect.minY)
 
@@ -121,9 +124,10 @@ struct GameView: View {
                 .presentationDragIndicator(.visible)
         }
         .fullScreenCover(isPresented: $editingLayout, onDismiss: { session.closeMenu() }) {
-            ThemeLayoutEditorLauncher(themeID: theme.id, system: session.game.system)
+            ThemeLayoutEditorLauncher(themeID: theme.id, system: session.game.system, gameID: session.game.id)
         }
         .onAppear(perform: connectPhysicalInput)
+        .background(ShakeDetector { if !session.isMenuOpen { handle(gestures.action(for: .shake)) } }.frame(width: 1, height: 1))
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { session.resume() } else { session.pause() }
         }
@@ -173,6 +177,7 @@ struct GameView: View {
 struct ThemeLayoutEditorLauncher: View {
     let themeID: String
     let system: GameSystem
+    var gameID: String? = nil
     @EnvironmentObject var themes: ThemeStore
     @EnvironmentObject var library: GameLibrary
     @State private var editableID: String?
@@ -180,14 +185,15 @@ struct ThemeLayoutEditorLauncher: View {
     var body: some View {
         Group {
             if let id = editableID, let theme = themes.theme(id: id) {
-                LayoutEditorView(theme: theme, system: system)
+                LayoutEditorView(theme: theme, system: system, gameID: gameID)
             } else {
                 ProgressView()
             }
         }
         .onAppear {
             guard editableID == nil, let theme = themes.theme(id: themeID) else { return }
-            editableID = themes.editableTheme(theme, library: library).id
+            // Per-game edits don't touch the theme, so built-ins don't need copying for them.
+            editableID = gameID == nil ? themes.editableTheme(theme, library: library).id : theme.id
         }
     }
 }

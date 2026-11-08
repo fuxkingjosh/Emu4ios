@@ -332,6 +332,14 @@ struct GameDetailSheet: View {
                     } footer: {
                         Text("Give a game its own look and controller layout.")
                     }
+                    Section("Save Data") {
+                        NavigationLink { GameSaveView(gameID: gameID) } label: {
+                            Label("Send, Swap or Restore Saves", systemImage: "externaldrive")
+                        }
+                        if LayoutStore.shared.hasCustomLayout(gameID) {
+                            Button("Reset This Game's Controller Layout") { LayoutStore.shared.remove(gameID) }
+                        }
+                    }
                     Section("Cheats") {
                         NavigationLink {
                             CheatsEditor(gameID: gameID, session: nil)

@@ -98,6 +98,44 @@ fragment float4 screen_fragment(VertexOut in [[stage_in]],
         color *= mix(1.0, line < 0.5 ? 1.0 : 0.6, k);
         return float4(color, 1);
     }
+    case 8: { // sharp but smooth: crisp pixels, softened only at their edges
+        float2 texel = uv * u.sourceSize;
+        float2 scale = max(u.outputSize / u.sourceSize, float2(1.0));
+        float2 region = 0.5 - 0.5 / scale;
+        float2 f = fract(texel);
+        float2 center = floor(texel) + 0.5;
+        float2 offset = (clamp((f - 0.5 - region) / (1.0 - 2.0 * region + 1e-5), 0.0, 1.0)
+                       - clamp((0.5 - f - region) / (1.0 - 2.0 * region + 1e-5), 0.0, 1.0)) * 0.5;
+        return float4(tex.sample(linear, (center + offset) / u.sourceSize).rgb, 1);
+    }
+    case 9: { // dot matrix: each pixel is a round dot
+        float3 color = tex.sample(nearest, uv).rgb;
+        float2 cell = fract(uv * u.sourceSize) - 0.5;
+        float dotMask = smoothstep(0.5, 0.36, length(cell));
+        float3 background = color * 0.18;
+        return float4(mix(color, mix(background, color, dotMask), k), 1);
+    }
+    case 10: { // VHS: color bleed, wobble and tracking noise
+        float wobble = sin(uv.y * 40.0 + u.time * 3.0) * 0.0015 * k;
+        float noiseLine = step(0.995, fract(sin(floor(uv.y * 120.0 + u.time * 20.0) * 43758.5453)));
+        float2 uv2 = float2(uv.x + wobble + noiseLine * 0.01 * k, uv.y);
+        float r = tex.sample(linear, uv2 + float2(0.004 * k, 0)).r;
+        float g = tex.sample(linear, uv2).g;
+        float b = tex.sample(linear, uv2 - float2(0.004 * k, 0)).b;
+        float3 color = float3(r, g, b);
+        float grain = fract(sin(dot(uv * u.time, float2(12.9898, 78.233))) * 43758.5453);
+        color += (grain - 0.5) * 0.06 * k;
+        color *= 1.0 - 0.15 * k * step(0.5, fract(uv.y * u.sourceSize.y * 0.5));
+        return float4(color, 1);
+    }
+    case 11: { // handheld LCD: red/green/blue subpixel stripes with a faint grid
+        float3 color = tex.sample(nearest, uv).rgb;
+        float2 cell = fract(uv * u.sourceSize);
+        float3 mask = cell.x < 0.333 ? float3(1.0, 0.35, 0.35) : (cell.x < 0.666 ? float3(0.35, 1.0, 0.35) : float3(0.35, 0.35, 1.0));
+        float grid = step(0.08, cell.y);
+        color = mix(color, color * mask * 1.6 * grid, k * 0.8);
+        return float4(color, 1);
+    }
     default: // sharp pixels
         return float4(tex.sample(nearest, uv).rgb, 1);
     }

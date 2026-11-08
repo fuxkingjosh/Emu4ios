@@ -40,6 +40,7 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { library.scanForNewFiles() }
         }
+        .overlay(alignment: .top) { BadgeBanner() }
         #if DEBUG
         .task { debugLaunchOptions() }
         #endif
@@ -96,6 +97,33 @@ struct ThemeImportSheet: View {
             .navigationTitle("Shared Theme")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+        }
+    }
+}
+
+/// Pops up when a badge is earned.
+struct BadgeBanner: View {
+    @ObservedObject private var stats = PlayStats.shared
+    @EnvironmentObject var themes: ThemeStore
+
+    var body: some View {
+        if let badge = stats.newlyEarned {
+            HStack(spacing: 12) {
+                Image(systemName: badge.icon).font(.title2).foregroundStyle(themes.active.style.accent.color)
+                VStack(alignment: .leading) {
+                    Text("Badge unlocked: \(badge.title)").font(.subheadline.bold())
+                    Text(badge.detail).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 12)
+            .background(.regularMaterial, in: Capsule())
+            .padding(.top, 8)
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .task(id: badge.id) {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                try? await Task.sleep(for: .seconds(3))
+                withAnimation { stats.newlyEarned = nil }
+            }
         }
     }
 }

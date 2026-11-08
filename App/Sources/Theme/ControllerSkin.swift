@@ -138,6 +138,8 @@ struct ButtonSpec: Codable, Hashable, Identifiable {
     var imageData: Data? = nil
     /// Optional picture while pressed (otherwise the normal picture dims).
     var pressedImageData: Data? = nil
+    /// Custom vibration pattern; replaces `haptic` when set.
+    var hapticPattern: [HapticBeat]? = nil
 
     var displayLabel: String { label ?? input.defaultLabel }
     var hasImage: Bool { imageData != nil }
@@ -341,6 +343,7 @@ extension ButtonSpec {
         dpadDiagonals = c.value(.dpadDiagonals, dpadDiagonals)
         imageData = c.value(.imageData, imageData)
         pressedImageData = c.value(.pressedImageData, pressedImageData)
+        hapticPattern = c.value(.hapticPattern, hapticPattern)
     }
 }
 

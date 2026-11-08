@@ -55,8 +55,8 @@ enum BuiltInThemes {
         t.style.darkMode = false
         t.style.fontDesign = .monospaced
         t.background = BackgroundStyle(kind: .solid, colors: [ThemeColor(hex: "#C4C0B4")])
-        t.screen = ScreenStyle(filter: .dmgGreen, intensity: 0.8, borderColor: ThemeColor(hex: "#5A5A6E"),
-                               borderWidth: 14, cornerRadius: 8, glow: 0)
+        t.screen = ScreenStyle(bezel: .brick, bezelColor: ThemeColor(hex: "#5A5A6E"), filter: .dmgGreen, intensity: 0.8,
+                               borderColor: ThemeColor(hex: "#00000000"), borderWidth: 0, cornerRadius: 3, glow: 0)
         (t.controllers, t.defaultController) = skins { b in
             switch b.input {
             case .a, .b:
