@@ -93,9 +93,14 @@ final class EmulationLoop: @unchecked Sendable {
         frame = FrameBuffer(width: size.width, height: size.height)
         audio = AudioOutput()
         resampler = AudioResampler(inputRate: core.sampleRate, outputRate: AudioOutput.outputRate)
-        let stateSize = core.saveState()?.count ?? 400_000
-        // Big states (PlayStation ≈ 4 MB) are captured less often to keep memory in check.
-        rewind = RewindBuffer(stateSize: stateSize, interval: stateSize > 1_000_000 ? 20 : 10)
+        if core.system.supportsRewind {
+            let stateSize = core.saveState()?.count ?? 400_000
+            // Big states (PlayStation ≈ 4 MB) are captured less often to keep memory in check.
+            rewind = RewindBuffer(stateSize: stateSize, interval: stateSize > 1_000_000 ? 20 : 10)
+        } else {
+            rewind = RewindBuffer(stateSize: 1, interval: 10)
+            _rewindEnabled = false
+        }
     }
 
     // MARK: Controls (any thread)

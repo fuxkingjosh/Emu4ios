@@ -309,7 +309,7 @@ enum GameSystem: String, Codable, CaseIterable, Identifiable {
                     "mupen64plus-EnableFBEmulation": "True", "mupen64plus-ThreadedRenderer": "False"]
         case .psp:
             return ["ppsspp_cpu_core": "IR JIT", "ppsspp_internal_resolution": "960x544",
-                    "ppsspp_fast_memory": "enabled", "ppsspp_auto_frameskip": "disabled",
+                    "ppsspp_fast_memory": "disabled", "ppsspp_auto_frameskip": "disabled",
                     "ppsspp_frame_duplication": "enabled", "ppsspp_backend": "opengl"]
         case .nds:
             return ["melonds_render_mode": "software", "melonds_threaded_renderer": "enabled",
@@ -344,6 +344,13 @@ enum GameSystem: String, Codable, CaseIterable, Identifiable {
         default: return .none
         }
     }
+
+    /// Rewind keeps many save states in memory; consoles with huge states (or cores that can only save
+    /// at safe moments, like PSP during loading) skip it.
+    var supportsRewind: Bool { ![.psp, .n64, .nds, .dos, .amiga, .c64, .jaguar].contains(self) }
+    /// PSP can't make a save state while a game is still loading, so it relies on the game's own saves
+    /// instead of the automatic save state when you quit.
+    var autoSavesState: Bool { self != .psp }
 
     var hasAnalogStick: Bool { inputs.contains(.leftStick) }
     var hasKeyboard: Bool { inputs.contains(.keyboard) }

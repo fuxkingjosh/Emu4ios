@@ -34,7 +34,7 @@ final class EmulatorSession: ObservableObject {
         self.game = game
         self.romURL = romURL
         loop = EmulationLoop(core: core)
-        loop.rewindEnabled = UserDefaults.standard.object(forKey: "rewindEnabled") as? Bool ?? true
+        loop.rewindEnabled = game.system.supportsRewind && (UserDefaults.standard.object(forKey: "rewindEnabled") as? Bool ?? true)
         applyCheats(game.cheats)
         refreshSaveStates()
     }
@@ -68,7 +68,7 @@ final class EmulatorSession: ObservableObject {
     /// Stops the game, writes the auto-save, and returns seconds played.
     func finish() -> (seconds: Double, lastFrame: UIImage?) {
         loop.paused = true
-        _ = writeState(slot: Self.autoSlot, announce: false)
+        if game.system.autoSavesState { _ = writeState(slot: Self.autoSlot, announce: false) }
         let image = loop.frame.makeImage().map { UIImage(cgImage: $0) }
         let seconds = loop.activePlaySeconds
         loop.stop()
@@ -197,7 +197,7 @@ final class EmulatorSession: ObservableObject {
     func setRewinding(_ on: Bool) {
         if on && hardcoreLocked { showToast("Rewind is off in Hardcore mode"); return }
         guard loop.rewindEnabled else {
-            if on { showToast("Rewind is off in Settings") }
+            if on { showToast(game.system.supportsRewind ? "Rewind is off in Settings" : "Rewind isn't available for \(game.system.shortName)") }
             return
         }
         isRewinding = on

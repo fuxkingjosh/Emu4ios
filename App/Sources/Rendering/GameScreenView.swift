@@ -120,7 +120,7 @@ struct StyledGameScreen: View {
                     BezelView(bezel: style.bezel, color: style.bezelColor.color, accent: accent,
                               screenSize: size, insets: EdgeInsets(top: top, leading: side, bottom: bottom, trailing: side))
                 }
-                GameScreenView(frame: frame, style: style)
+                GameScreenView(frame: frame, style: style.effective(for: system))
                     .frame(width: size.width, height: size.height)
                     .clipShape(RoundedRectangle(cornerRadius: style.cornerRadius, style: .continuous))
                     .overlay(

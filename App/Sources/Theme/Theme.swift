@@ -228,6 +228,16 @@ enum ScreenFilter: String, Codable, CaseIterable, Identifiable {
     var shaderIndex: Int32 { Int32(ScreenFilter.allCases.firstIndex(of: self) ?? 0) }
 }
 
+extension ScreenStyle {
+    /// Game Boy colour palettes only make sense on the original Game Boy; every other console keeps its colours.
+    func effective(for system: GameSystem) -> ScreenStyle {
+        var s = self
+        if (filter == .dmgGreen || filter == .pocket) && system != .gb { s.filter = .none }
+        if filter == .colorCorrect && ![.gbc, .gba].contains(system) { s.filter = .none }
+        return s
+    }
+}
+
 enum BezelStyle: String, Codable, CaseIterable, Identifiable {
     case none, handheld, brick, crtTV, arcade, glass
     var id: String { rawValue }
