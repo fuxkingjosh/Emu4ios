@@ -9,7 +9,10 @@ struct Emu4iosApp: App {
 
     init() {
         CloudSync.shared.start()
-        Task { @MainActor in Achievements.shared.start() }
+        Task { @MainActor in
+            Achievements.shared.start()
+            LiveActivityController.shared.setUp() // clears a "playing" timer left by older builds
+        }
     }
 
     var body: some Scene {

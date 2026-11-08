@@ -5,7 +5,6 @@ struct SettingsView: View {
     @EnvironmentObject var gestures: GestureSettings
     @AppStorage("autoResume") private var autoResume = true
     @AppStorage("autoCoverArt") private var autoCoverArt = true
-    @AppStorage("liveActivityEnabled") private var liveActivity = true
     @AppStorage("rewindEnabled") private var rewindEnabled = true
     @AppStorage("respectSilentSwitch") private var respectSilentSwitch = true
     @AppStorage("clipsEnabled") private var clipsEnabled = true
@@ -31,7 +30,6 @@ struct SettingsView: View {
                     Toggle("Resume Where You Left Off", isOn: $autoResume)
                     Toggle("Rewind", isOn: $rewindEnabled)
                     Toggle("Mute With Silent Switch", isOn: $respectSilentSwitch)
-                    Toggle("Show on Lock Screen & Dynamic Island", isOn: $liveActivity)
                     Toggle("Play on TV When Connected", isOn: $tvMode)
                 }
 
