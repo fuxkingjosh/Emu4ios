@@ -5,6 +5,7 @@ struct RootView: View {
     @EnvironmentObject var router: AppRouter
     @EnvironmentObject var library: GameLibrary
     @Environment(\.scenePhase) private var scenePhase
+    @State private var debugEditorSystem: GameSystem?
 
     var body: some View {
         let theme = themes.active
@@ -43,6 +44,9 @@ struct RootView: View {
         .overlay(alignment: .top) { BadgeBanner() }
         #if DEBUG
         .task { debugLaunchOptions() }
+        .fullScreenCover(item: $debugEditorSystem) { system in
+            LayoutEditorView(theme: themes.active, system: system)
+        }
         #endif
     }
 
@@ -52,6 +56,9 @@ struct RootView: View {
         let defaults = UserDefaults.standard
         if let tab = defaults.string(forKey: "E4StartTab") {
             router.handle(URL(string: "emu4ios://tab?name=\(tab)")!, library: library, themes: themes)
+        }
+        if let system = defaults.string(forKey: "E4OpenEditor").flatMap(GameSystem.init(rawValue:)) {
+            debugEditorSystem = system
         }
         if let file = defaults.string(forKey: "E4AutoPlay") {
             library.scanForNewFiles()

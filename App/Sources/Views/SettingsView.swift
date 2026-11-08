@@ -103,7 +103,7 @@ struct SettingsView: View {
                 }
 
                 Section("About") {
-                    LabeledContent("Version", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")
+                    LabeledContent("Version", value: "\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "") (build \(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))")
                     NavigationLink("Legal & Licenses") { LegalView() }
                 }
             }

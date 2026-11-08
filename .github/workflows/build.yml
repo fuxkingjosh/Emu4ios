@@ -85,23 +85,33 @@ jobs:
           cp "E4 Demo.gba" "$DATA/Documents/Games/"
           python3 Tests/make_ps1_test.py "$DATA/Documents/Games/E4 PS1 Demo.exe"
           shoot() { sleep "$2"; xcrun simctl io "$DEVICE" screenshot "shots/$1.png"; }
+          stop() {
+            xcrun simctl terminate "$DEVICE" $BID 2>/dev/null || true
+            sleep 1
+            pkill -9 -f "Emu4ios.app/Emu4ios" 2>/dev/null || true
+            sleep 1
+          }
           for theme in builtin.midnight builtin.neon builtin.dmg builtin.candy; do
             name=${theme#builtin.}
-            xcrun simctl terminate "$DEVICE" $BID || true
+            stop
             xcrun simctl spawn "$DEVICE" defaults write $BID activeThemeID "$theme"
             xcrun simctl spawn "$DEVICE" defaults write $BID autoResume -bool NO
             xcrun simctl launch "$DEVICE" $BID; shoot "library-$name" 6
-            xcrun simctl terminate "$DEVICE" $BID || true
+            stop
             xcrun simctl launch "$DEVICE" $BID -E4AutoPlay "E4 Demo.gba"; shoot "game-$name" 7
           done
-          xcrun simctl terminate "$DEVICE" $BID || true
+          stop
           xcrun simctl spawn "$DEVICE" defaults write $BID activeThemeID builtin.midnight
           xcrun simctl launch "$DEVICE" $BID -E4AutoPlay "E4 PS1 Demo.exe"; shoot "game-ps1" 8
-          xcrun simctl terminate "$DEVICE" $BID || true
+          stop
           xcrun simctl launch "$DEVICE" $BID -E4StartTab themes; shoot "themes" 6
-          xcrun simctl terminate "$DEVICE" $BID || true
+          stop
+          xcrun simctl launch "$DEVICE" $BID -E4OpenEditor gba; shoot "editor-gba" 6
+          stop
+          xcrun simctl launch "$DEVICE" $BID -E4StartTab settings; shoot "settings" 5
+          stop
           xcrun simctl launch "$DEVICE" $BID -E4StartTab stats; shoot "stats" 5
-          xcrun simctl terminate "$DEVICE" $BID || true
+          stop
           xcrun simctl launch "$DEVICE" $BID; shoot "library-after-play" 5
           ls -la shots
 
