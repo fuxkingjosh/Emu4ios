@@ -22,7 +22,10 @@ struct Theme: Codable, Identifiable, Hashable {
     var defaultController: ControllerSkin = .standard(for: .gba)
 
     func controller(for system: GameSystem) -> ControllerSkin {
-        controllers[system.rawValue] ?? defaultController.adapted(to: system)
+        if let skin = controllers[system.rawValue] { return skin.adapted(to: system) }
+        // Handhelds with the same buttons share the default layout; everything else gets its own shape in the theme's colors.
+        if [.gb, .gbc, .gba].contains(system) { return defaultController.adapted(to: system) }
+        return ControllerSkin.standard(for: system, styledLike: defaultController)
     }
 
     func label(_ key: LabelKey) -> String {

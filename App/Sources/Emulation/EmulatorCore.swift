@@ -10,8 +10,13 @@ protocol EmulatorCore: AnyObject {
     var title: String { get }
     var videoSize: (width: Int, height: Int) { get }
 
-    /// RetroPad bits (see `RetroPad`).
+    /// RetroPad bits for player 1 (see `RetroPad`).
     func setButtons(_ mask: UInt32)
+    /// Full input: all players, sticks, touch screen, mouse.
+    func setInput(_ input: InputFrame)
+    func sendKey(_ event: KeyEvent)
+    /// Draws with OpenGL ES (N64, PSP).
+    var usesGPU: Bool { get }
     func runFrame()
     func reset()
     /// Calls `body` with the current frame: RGBX pixels, width, height, row stride in pixels.
@@ -31,6 +36,9 @@ protocol EmulatorCore: AnyObject {
 
 extension EmulatorCore {
     func saveState() -> Data? { saveState(withSaveData: false) }
+    func setInput(_ input: InputFrame) { setButtons(input.ports[0] & 0xFFFF) }
+    func sendKey(_ event: KeyEvent) {}
+    var usesGPU: Bool { false }
 }
 
 enum EmulatorCores {
@@ -40,6 +48,36 @@ enum EmulatorCores {
             return LibretroCore(system: system, contentURL: romURL, saveURL: saveURL)
         }
         return MGBACore(romURL: romURL, saveURL: saveURL)
+    }
+
+    /// Why a game couldn't start, shown to the player.
+    static func problem(for system: GameSystem) -> String? {
+        if let fw = system.coreFramework, CoreRegistry.path(for: fw) == nil {
+            return "The \(system.name) emulator isn't in this build of Emu4ios."
+        }
+        let missing = system.requiredBIOS.filter {
+            !FileManager.default.fileExists(atPath: biosFolder.appendingPathComponent($0).path)
+        }
+        if !missing.isEmpty {
+            return "\(system.name) needs the BIOS file \(missing.joined(separator: ", ")). Put it in Files → Emu4ios → BIOS."
+        }
+        return nil
+    }
+
+    /// Copies bundled core data (PPSSPP fonts, shaders…) into the system folder once per app version.
+    static func installCoreAssets() {
+        guard let assets = Bundle.main.url(forResource: "CoreAssets", withExtension: nil) else { return }
+        let version = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "0"
+        let key = "coreAssetsVersion"
+        guard UserDefaults.standard.string(forKey: key) != version else { return }
+        let fm = FileManager.default
+        let items = (try? fm.contentsOfDirectory(at: assets, includingPropertiesForKeys: nil)) ?? []
+        for item in items where item.hasDirectoryPath {
+            let dest = biosFolder.appendingPathComponent(item.lastPathComponent, isDirectory: true)
+            try? fm.removeItem(at: dest)
+            try? fm.copyItem(at: item, to: dest)
+        }
+        UserDefaults.standard.set(version, forKey: key)
     }
 
     /// Folder for optional BIOS files (Files app → Emu4ios → BIOS).
@@ -133,7 +171,7 @@ final class MGBACore: EmulatorCore {
     func flushSave() {} // mGBA writes battery saves straight to the file
 }
 
-// MARK: - libretro cores (PlayStation)
+// MARK: - libretro cores (every other system)
 
 final class LibretroCore: EmulatorCore {
     private let handle: OpaquePointer
@@ -142,12 +180,20 @@ final class LibretroCore: EmulatorCore {
     let sampleRate: Double
     let title: String
 
+    let usesGPU: Bool
+
     init?(system: GameSystem, contentURL: URL, saveURL: URL) {
-        guard let h = e4lr_create(contentURL.path, saveURL.path, EmulatorCores.biosFolder.path) else { return nil }
+        guard let framework = system.coreFramework, let corePath = CoreRegistry.path(for: framework) else { return nil }
+        EmulatorCores.installCoreAssets()
+        e4lr_clear_options()
+        for (key, value) in system.coreOptions { e4lr_set_option(key, value) }
+        for (key, value) in CoreOptionOverrides.values(for: system) { e4lr_set_option(key, value) }
+        guard let h = e4lr_create(corePath, contentURL.path, saveURL.path, EmulatorCores.biosFolder.path) else { return nil }
         handle = h
         self.system = system
         fps = e4lr_fps(h)
         sampleRate = e4lr_sample_rate(h)
+        usesGPU = e4lr_uses_gpu(h)
         title = contentURL.deletingPathExtension().lastPathComponent
     }
 
@@ -159,7 +205,32 @@ final class LibretroCore: EmulatorCore {
         return (Int(w), Int(h))
     }
 
-    func setButtons(_ mask: UInt32) { e4lr_set_buttons(handle, mask) }
+    func setButtons(_ mask: UInt32) { e4lr_set_buttons(handle, mask & 0xFFFF) }
+
+    func setInput(_ input: InputFrame) {
+        for port in 0..<4 {
+            let bits = input.ports[port]
+            e4lr_set_port_buttons(handle, UInt32(port), bits & 0xFFFF)
+            var right = input.sticks[port][1]
+            // N64 C buttons are the right stick pushed all the way.
+            if bits & RetroPad.cButtons != 0 {
+                right = .zero
+                if bits & RetroPad.cUp != 0 { right.y = -32767 }
+                if bits & RetroPad.cDown != 0 { right.y = 32767 }
+                if bits & RetroPad.cLeft != 0 { right.x = -32767 }
+                if bits & RetroPad.cRight != 0 { right.x = 32767 }
+            }
+            let left = input.sticks[port][0]
+            e4lr_set_analog(handle, UInt32(port), 0, left.x, left.y)
+            e4lr_set_analog(handle, UInt32(port), 1, right.x, right.y)
+        }
+        e4lr_set_pointer(handle, input.pointer.x, input.pointer.y, input.pointerDown)
+        e4lr_mouse(handle, input.mouseDelta.x, input.mouseDelta.y, input.mouseLeft, input.mouseRight)
+    }
+
+    func sendKey(_ event: KeyEvent) {
+        e4lr_key(handle, event.code, event.down, event.character, event.modifiers)
+    }
     func runFrame() { e4lr_run_frame(handle) }
     func reset() { e4lr_reset(handle) }
 

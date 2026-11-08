@@ -1,4 +1,4 @@
-// E4Libretro — runs one libretro core (statically linked) behind a small C API
+// E4Libretro — loads libretro cores (each an embedded framework) and runs one at a time behind a small C API
 // that mirrors E4Emulator, so the Swift side treats every engine the same way.
 //
 // Buttons use the RetroPad layout (bit n = RETRO_DEVICE_ID_JOYPAD n):
@@ -17,8 +17,9 @@ extern "C" {
 
 typedef struct E4Libretro E4Libretro;
 
-/// `savePath`: memory card / battery file. `systemDir`: where BIOS files may be placed (optional for PS1).
-E4Libretro* e4lr_create(const char* contentPath, const char* savePath, const char* systemDir);
+/// `corePath`: the core's binary inside the app (Frameworks/<Core>.framework/<Core>).
+/// `savePath`: memory card / battery file. `systemDir`: where BIOS files may be placed.
+E4Libretro* e4lr_create(const char* corePath, const char* contentPath, const char* savePath, const char* systemDir);
 void e4lr_destroy(E4Libretro* lr);
 
 void e4lr_video_size(const E4Libretro* lr, unsigned* width, unsigned* height);
@@ -28,6 +29,27 @@ double e4lr_aspect_ratio(const E4Libretro* lr);
 void e4lr_core_name(char* out, size_t outSize);
 
 void e4lr_set_buttons(E4Libretro* lr, uint32_t retropadMask);
+/// Players 1–4 (port 0–3).
+void e4lr_set_port_buttons(E4Libretro* lr, unsigned port, uint32_t retropadMask);
+/// stick: 0 = left, 1 = right. Values −32767…32767.
+void e4lr_set_analog(E4Libretro* lr, unsigned port, unsigned stick, int16_t x, int16_t y);
+/// Touch screen (DS): −32767…32767 across the whole frame.
+void e4lr_set_pointer(E4Libretro* lr, int16_t x, int16_t y, bool pressed);
+/// Computer cores: relative mouse movement and buttons.
+void e4lr_mouse(E4Libretro* lr, int16_t dx, int16_t dy, bool left, bool right);
+/// Computer cores: libretro key code (RETROK_*), pressed state, Unicode character.
+void e4lr_key(E4Libretro* lr, unsigned keycode, bool down, uint32_t character, uint16_t modifiers);
+/// True for cores that draw with OpenGL ES (N64, PSP).
+bool e4lr_uses_gpu(const E4Libretro* lr);
+
+/// Core options, applied the next time a core asks (call before e4lr_create).
+void e4lr_set_option(const char* key, const char* value);
+void e4lr_clear_options(void);
+
+/// Emulated memory for RetroAchievements.
+size_t e4lr_memory_map_count(const E4Libretro* lr);
+const void* e4lr_memory_map(const E4Libretro* lr);
+uint8_t* e4lr_memory(unsigned id, size_t* size);
 void e4lr_run_frame(E4Libretro* lr);
 void e4lr_reset(E4Libretro* lr);
 

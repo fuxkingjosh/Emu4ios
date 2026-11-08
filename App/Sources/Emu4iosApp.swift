@@ -66,7 +66,7 @@ final class AppRouter: ObservableObject {
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             do { incomingTheme = try ThemeSharing.decode(Data(contentsOf: url)) }
             catch { errorMessage = error.localizedDescription }
-        } else if GameSystem(fileExtension: url.pathExtension) != nil {
+        } else if GameSystem.allExtensions.contains(url.pathExtension.lowercased()) {
             library.importFiles([url])
             selectedTab = .library
         }

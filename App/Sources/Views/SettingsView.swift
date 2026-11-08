@@ -90,15 +90,17 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    LabeledContent("RetroAchievements", value: themes.active.label(.comingSoon))
-                    LabeledContent("Wi-Fi Link Cable", value: themes.active.label(.comingSoon))
-                    LabeledContent("PSP, DS & More Systems", value: themes.active.label(.comingSoon))
+                    NavigationLink { ConsoleSettingsView() } label: {
+                        Label("Consoles & BIOS", systemImage: "gamecontroller")
+                    }
                 } header: {
-                    Text("On the Way")
+                    Text("Consoles")
+                } footer: {
+                    Text("\(GameSystem.available.count) consoles. Tune resolution and other options, and check BIOS files.")
                 }
 
                 Section("Controllers & Keyboards") {
-                    Text("Xbox, PlayStation and MFi controllers connect automatically. Triggers: left = rewind, right = fast forward. Keyboard: arrows, X = A, Z = B, A/S = L/R, Enter = Start, Shift = Select, Tab = fast forward, O/P = quick save/load, Esc = menu.")
+                    Text("Xbox, PlayStation and MFi controllers connect automatically — up to four, one per player. Spare triggers: left = rewind, right = fast forward. Keyboard: arrows, X = A, Z = B, C/V = Y/X, A/S = L/R, Q/W = L2/R2, I/J/K/L = N64 C buttons, Enter = Start, Shift = Select, Tab = fast forward, O/P = quick save/load, Esc = menu. In DOS, Commodore 64 and Amiga games every key types into the game.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
 
@@ -169,15 +171,45 @@ struct LegalView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Emu4ios does not include any games. Only play games you own and have the right to use.")
                     .font(.headline)
-                Text("Emu4ios is not affiliated with, endorsed by, or sponsored by Nintendo or Sony Interactive Entertainment. All trademarks belong to their respective owners.")
+                Text("Emu4ios is not affiliated with, endorsed by, or sponsored by Nintendo, Sony Interactive Entertainment, Sega, Atari, NEC, SNK, Bandai, Commodore or id Software. All trademarks belong to their respective owners.")
                 Divider()
                 Text("Open Source").font(.title3.bold())
                 Text("Game Boy, Game Boy Color and Game Boy Advance emulation is powered by mGBA by Vicki Pfau and contributors, licensed under the Mozilla Public License 2.0. The mGBA source code is available at github.com/mgba-emu/mgba.")
-                Text("PlayStation emulation is powered by PCSX-ReARMed by notaz and contributors, licensed under the GNU General Public License v2 or later. Source: github.com/libretro/pcsx_rearmed.")
+                credit("Game Boy, Game Boy Color, Game Boy Advance — mGBA", "MPL-2.0", "github.com/mgba-emu/mgba")
+                credit("PlayStation", "GPL-2.0-or-later", "github.com/libretro/pcsx_rearmed")
+                credit("NES, Famicom Disk System", "GPL-3.0", "github.com/libretro/mesen")
+                credit("SNES", "GPL-3.0", "github.com/libretro/bsnes")
+                credit("Genesis / Mega Drive, Sega CD", "AGPL-3.0", "github.com/Clownacy/clownmdemu-libretro")
+                credit("Master System, Game Gear, SG-1000", "GPL-3.0", "github.com/drhelius/Gearsystem")
+                credit("Nintendo 64", "GPL-2.0-or-later", "github.com/libretro/mupen64plus-libretro-nx")
+                credit("PC Engine / TurboGrafx-16, CD", "GPL-2.0-or-later", "github.com/libretro/beetle-pce-fast-libretro")
+                credit("SuperGrafx", "GPL-3.0", "github.com/drhelius/Geargrafx")
+                credit("Neo Geo Pocket (Color)", "GPL-2.0-or-later", "github.com/libretro/beetle-ngp-libretro")
+                credit("WonderSwan (Color)", "GPL-2.0-or-later", "github.com/libretro/beetle-wswan-libretro")
+                credit("Virtual Boy", "GPL-2.0-or-later", "github.com/libretro/beetle-vb-libretro")
+                credit("Atari Lynx", "GPL-2.0-or-later", "github.com/libretro/beetle-lynx-libretro")
+                credit("Atari 2600", "GPL-2.0-or-later", "github.com/libretro/stella2014-libretro")
+                credit("Atari 5200", "GPL-2.0-or-later", "github.com/libretro/a5200")
+                credit("Atari 7800", "GPL-2.0-or-later", "github.com/libretro/prosystem-libretro")
+                credit("Atari Jaguar", "GPL-3.0", "github.com/libretro/virtualjaguar-libretro")
+                credit("Pokémon Mini", "GPL-3.0", "github.com/libretro/PokeMini")
+                credit("Commodore 64", "GPL-2.0-or-later", "github.com/libretro/vice-libretro")
+                credit("Amiga", "GPL-2.0-or-later", "github.com/libretro/libretro-uae")
+                credit("MS-DOS", "GPL-2.0-or-later", "github.com/libretro/dosbox-pure")
+                credit("DOOM", "GPL-2.0-or-later", "github.com/libretro/libretro-prboom")
+                credit("Nintendo DS", "GPL-3.0", "github.com/JesseTG/melonds-ds")
+                credit("PSP", "GPL-2.0-or-later", "github.com/hrydgard/ppsspp")
                 Text("Emu4ios is free software under the GNU General Public License v3. Its full source code is available at github.com/fuxkingjosh/Emu4ios.")
             }
             .padding()
         }
         .navigationTitle("Legal")
+    }
+
+    private func credit(_ what: String, _ license: String, _ source: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(what).font(.subheadline.bold())
+            Text("\(license) · \(source)").font(.caption).foregroundStyle(.secondary)
+        }
     }
 }

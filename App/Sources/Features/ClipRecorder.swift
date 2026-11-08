@@ -51,17 +51,13 @@ final class ClipRecorder: @unchecked Sendable {
     func begin(system: GameSystem, fps: Double, sampleRate: Double) {
         queue.async {
             self.discardAll()
-            // Output size: a sharp multiple of the system's screen (PlayStation resolutions vary, so 960×720).
+            // Output size: a sharp multiple of the system's screen, about 640 pixels on the long side
+            // (640×576 GB, 720×480 GBA, 640×480 TV consoles, 960×544 PSP).
             let native = system.screenSize
-            // Sharp but light: 640×576 (GB), 720×480 (GBA), 640×480 (PS1).
-            let factor: Int
-            switch system {
-            case .gb, .gbc: factor = 4
-            case .gba: factor = 3
-            case .ps1: factor = 2
-            }
-            self.width = Int(native.width) * factor
-            self.height = Int(native.height) * factor
+            let factor = max(1, Int((640 / max(native.width, native.height)).rounded()))
+            // H.264 needs even dimensions.
+            self.width = (Int(native.width) * factor + 1) & ~1
+            self.height = (Int(native.height) * factor + 1) & ~1
             self.fps = fps
             self.sampleRate = sampleRate
             self.frameCounter = 0

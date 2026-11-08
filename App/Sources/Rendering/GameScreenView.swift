@@ -134,12 +134,25 @@ struct StyledGameScreen: View {
         }
     }
 
-    private func fittedSize(in available: CGSize) -> CGSize {
+    /// Where the game picture itself sits inside a screen area of `container` size (for touch input).
+    static func pictureRect(in container: CGSize, system: GameSystem, style: ScreenStyle) -> CGRect {
+        let view = StyledGameScreen(frame: FrameBuffer(width: 1, height: 1), system: system, style: style)
+        let t = style.bezel.thickness
+        let inner = CGSize(width: container.width / (1 + 2 * t.side),
+                           height: container.height / (1 + (t.top + t.bottom) * Double(system.screenSize.width / system.screenSize.height)))
+        let size = view.fittedSize(in: inner)
+        let top = size.width * t.top, bottom = size.width * t.bottom
+        let rect = CGRect(x: (container.width - size.width) / 2, y: (container.height - size.height) / 2 + (top - bottom) / 2,
+                          width: size.width, height: size.height)
+        return rect.insetBy(dx: style.borderWidth, dy: style.borderWidth)
+    }
+
+    fileprivate func fittedSize(in available: CGSize) -> CGSize {
         let native = system.screenSize
         let inner = CGSize(width: max(available.width - style.borderWidth * 2, 1),
                            height: max(available.height - style.borderWidth * 2, 1))
         var scale = min(inner.width / native.width, inner.height / native.height)
-        if style.integerScaling && system != .ps1 {
+        if style.integerScaling && system.prefersIntegerScaling {
             let pixelScale = UIScreen.main.scale
             scale = max(1, (scale * pixelScale).rounded(.down)) / pixelScale
         }

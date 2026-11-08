@@ -8,6 +8,7 @@ struct GameContainerView: View {
     @EnvironmentObject var themes: ThemeStore
     @State private var session: EmulatorSession?
     @State private var failed = false
+    @State private var problem: String?
 
     var body: some View {
         ZStack {
@@ -18,7 +19,8 @@ struct GameContainerView: View {
                 VStack(spacing: 16) {
                     Image(systemName: "exclamationmark.triangle.fill").font(.largeTitle).foregroundStyle(.yellow)
                     Text("This game couldn't be loaded").font(.title3.bold()).foregroundStyle(.white)
-                    Text("The file may be damaged or not a supported game.").foregroundStyle(.gray)
+                    Text(problem ?? "The file may be damaged or not a supported game.")
+                        .foregroundStyle(.gray).multilineTextAlignment(.center)
                     Button("Back to Library") { router.playing = nil }.buttonStyle(.borderedProminent)
                 }
                 .padding()
@@ -28,6 +30,11 @@ struct GameContainerView: View {
         }
         .task {
             guard session == nil else { return }
+            if let reason = EmulatorCores.problem(for: game.system) {
+                problem = reason
+                failed = true
+                return
+            }
             if let s = EmulatorSession(game: game, romURL: library.romURL(for: game)) {
                 session = s
                 let resume = UserDefaults.standard.object(forKey: "autoResume") as? Bool ?? true
@@ -85,15 +92,23 @@ struct GameView: View {
                     .frame(width: screenRect.width, height: screenRect.height)
                     .offset(x: screenRect.minX, y: screenRect.minY)
 
-                ScreenGestureLayer { gesture in handle(gestures.action(for: gesture)) }
+                screenInputLayer(size: screenRect.size)
                     .frame(width: screenRect.width, height: screenRect.height)
                     .offset(x: screenRect.minX, y: screenRect.minY)
+
+                if session.game.system.hasKeyboard {
+                    ComputerKeyboard(visible: $session.keyboardVisible,
+                                     onCharacter: { session.type($0) },
+                                     onKey: { code, down in session.key(code, down: down) })
+                        .frame(width: 1, height: 1)
+                }
 
                 if !hideTouch {
                     ControllerOverlay(layout: layout, skin: skin, actions: ControllerActions(
                         press: { input, touch, mask, turbo in session.press(input, touch: touch, mask: mask, turbo: turbo) },
                         direction: { touch, mask in session.updateDirection(touch: touch, mask: mask) },
-                        release: { input, touch in session.release(input, touch: touch) }))
+                        release: { input, touch in session.release(input, touch: touch) },
+                        analog: { input, x, y in session.setStick(input, x: x, y: y) }))
                 } else {
                     // Always leave a way into the menu.
                     Button { session.openMenu() } label: {
@@ -133,6 +148,24 @@ struct GameView: View {
         }
     }
 
+    /// DS games use the screen as their touch screen, computers as a trackpad; everything else gets screen gestures.
+    @ViewBuilder
+    private func screenInputLayer(size: CGSize) -> some View {
+        let system = session.game.system
+        let picture = StyledGameScreen.pictureRect(in: size, system: system, style: theme.screen)
+        switch system.screenTouch {
+        case .touchScreen:
+            ScreenTouchLayer(mode: .touchScreen, pictureRect: picture,
+                             onTouch: { x, y, down in session.touchScreen(x: x, y: y, down: down) })
+        case .mouse:
+            ScreenTouchLayer(mode: .mouse, pictureRect: picture,
+                             onMouseMove: { dx, dy in session.moveMouse(dx: dx, dy: dy) },
+                             onMouseButtons: { l, r in session.mouseButtons(left: l, right: r) })
+        case .none:
+            ScreenGestureLayer { gesture in handle(gestures.action(for: gesture)) }
+        }
+    }
+
     @ViewBuilder
     private var statusBadges: some View {
         HStack(spacing: 8) {
@@ -167,7 +200,9 @@ struct GameView: View {
 
     private func connectPhysicalInput() {
         physical.system = session.game.system
-        physical.onButtons = { mask in session.setPhysicalButtons(mask) }
+        physical.onButtons = { mask, port in session.setPhysicalButtons(mask, port: port) }
+        physical.onStick = { stick, x, y, port in session.setStick(stick == 1 ? .rightStick : .leftStick, x: x, y: y, port: port) }
+        physical.onKey = { code, down in session.key(code, down: down) }
         physical.onAction = { action in session.press(action, touch: "physical-\(action.rawValue)") }
         physical.onActionReleased = { action in session.release(action, touch: "physical-\(action.rawValue)") }
     }

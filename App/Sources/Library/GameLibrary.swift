@@ -76,31 +76,49 @@ final class GameLibrary: ObservableObject {
 
     // MARK: Import
 
+    /// Files whose console couldn't be worked out; the library asks the player to pick one.
+    @Published var needsSystemChoice: [String] = []
+
     /// Copies picked files into the library. Returns how many games were added.
     @discardableResult
     func importFiles(_ urls: [URL]) -> Int {
         var added = 0
         var skipped: [String] = []
-        for url in urls {
+        // Disc track files (.bin) that belong to a .cue sheet go in first, so the sheet can be identified.
+        let companions = urls.filter {
+            GameSystem.companionExtensions.contains($0.pathExtension.lowercased()) && Self.isReferencedByCueSheet($0.lastPathComponent, among: urls)
+        }
+        for url in companions {
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-
-            if url.pathExtension.lowercased() == "e4theme" { continue }
-            // Disc track files (.bin) that belong to a .cue sheet are copied but not listed.
-            if GameSystem.companionExtensions.contains(url.pathExtension.lowercased()),
-               Self.isReferencedByCueSheet(url.lastPathComponent, among: urls) {
-                try? FileManager.default.copyItem(at: url, to: AppPaths.games.appendingPathComponent(url.lastPathComponent))
+            let dest = AppPaths.games.appendingPathComponent(url.lastPathComponent)
+            try? FileManager.default.removeItem(at: dest)
+            try? FileManager.default.copyItem(at: url, to: dest)
+        }
+        for url in urls where !companions.contains(url) {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            let ext = url.pathExtension.lowercased()
+            if ext == "e4theme" { continue }
+            if ext == "zip", !(SystemDetector.detect(url) == .dos) {
+                let unpacked = unpackArchive(url)
+                if unpacked == 0 { skipped.append(url.lastPathComponent) }
+                added += unpacked
                 continue
             }
-            guard let system = GameSystem(fileExtension: url.pathExtension) else {
+            guard GameSystem.allExtensions.contains(ext) else {
                 skipped.append(url.lastPathComponent)
                 continue
             }
             let destination = uniqueDestination(for: url.lastPathComponent)
             do {
                 try FileManager.default.copyItem(at: url, to: destination)
-                add(fileName: destination.lastPathComponent, system: system)
-                added += 1
+                if let system = SystemDetector.detect(destination) {
+                    add(fileName: destination.lastPathComponent, system: system)
+                    added += 1
+                } else {
+                    needsSystemChoice.append(destination.lastPathComponent)
+                }
             } catch {
                 skipped.append(url.lastPathComponent)
             }
@@ -115,6 +133,54 @@ final class GameLibrary: ObservableObject {
         return added
     }
 
+    /// Pulls games out of a .zip (one archive can hold several). Returns how many were added.
+    private func unpackArchive(_ url: URL) -> Int {
+        guard let zip = try? ZipArchive(url: url) else { return 0 }
+        var added = 0
+        let files = zip.entries.filter { !$0.isDirectory && !$0.name.hasPrefix("__MACOSX") }
+        // Track files first so their .cue can be identified.
+        func isTrack(_ e: ZipArchive.Entry) -> Bool { GameSystem.companionExtensions.contains((e.name as NSString).pathExtension.lowercased()) }
+        let ordered = files.filter(isTrack) + files.filter { !isTrack($0) }
+        var extracted: [URL] = []
+        for entry in ordered {
+            let name = (entry.name as NSString).lastPathComponent
+            let ext = (name as NSString).pathExtension.lowercased()
+            guard GameSystem.allExtensions.contains(ext) || GameSystem.companionExtensions.contains(ext),
+                  let data = try? zip.extract(entry) else { continue }
+            let dest = GameSystem.companionExtensions.contains(ext)
+                ? AppPaths.games.appendingPathComponent(name) : uniqueDestination(for: name)
+            guard (try? data.write(to: dest, options: .atomic)) != nil else { continue }
+            extracted.append(dest)
+        }
+        let referenced = Self.cueReferencedFiles(in: extracted)
+        for file in extracted where !referenced.contains(file.lastPathComponent) {
+            if let system = SystemDetector.detect(file) {
+                add(fileName: file.lastPathComponent, system: system)
+                added += 1
+            } else {
+                needsSystemChoice.append(file.lastPathComponent)
+            }
+        }
+        return added
+    }
+
+    /// The player picked the console for a file we couldn't identify.
+    func assignSystem(_ system: GameSystem, to fileName: String) {
+        needsSystemChoice.removeAll { $0 == fileName }
+        guard !games.contains(where: { $0.fileName == fileName }) else { return }
+        add(fileName: fileName, system: system)
+        save()
+        autoFindArt()
+    }
+
+    /// Fixes a game that was filed under the wrong console.
+    func changeSystem(of game: Game, to system: GameSystem) {
+        guard let i = games.firstIndex(where: { $0.id == game.id }) else { return }
+        games[i].system = system
+        save()
+        findArt(for: games[i], manual: false)
+    }
+
     /// Picks up games dropped into the Games folder through the Files app.
     func scanForNewFiles() {
         let files = (try? FileManager.default.contentsOfDirectory(at: AppPaths.games, includingPropertiesForKeys: nil)) ?? []
@@ -122,9 +188,14 @@ final class GameLibrary: ObservableObject {
         var changed = false
         let referenced = Self.cueReferencedFiles(in: files)
         for file in files where !known.contains(file.lastPathComponent) && !referenced.contains(file.lastPathComponent) {
-            if let system = GameSystem(fileExtension: file.pathExtension) {
+            let ext = file.pathExtension.lowercased()
+            guard GameSystem.allExtensions.contains(ext), !needsSystemChoice.contains(file.lastPathComponent) else { continue }
+            if ext == "zip", SystemDetector.detect(file) != .dos { continue } // archives are unpacked on import only
+            if let system = SystemDetector.detect(file) {
                 add(fileName: file.lastPathComponent, system: system)
                 changed = true
+            } else {
+                needsSystemChoice.append(file.lastPathComponent)
             }
         }
         // Drop entries whose file was deleted in the Files app (and track files that now belong to a cue).
@@ -152,9 +223,16 @@ final class GameLibrary: ObservableObject {
         return url
     }
 
-    /// File names listed in .cue/.ccd sheets (their tracks shouldn't show up as separate games).
+    /// File names listed in .cue/.ccd sheets and .m3u playlists (their parts shouldn't show up as separate games).
     static func cueReferencedFiles(in files: [URL]) -> Set<String> {
         var names = Set<String>()
+        for list in files where list.pathExtension.lowercased() == "m3u" {
+            guard let text = try? String(contentsOf: list, encoding: .utf8) else { continue }
+            for line in text.components(separatedBy: .newlines) {
+                let entry = line.trimmingCharacters(in: .whitespaces)
+                if !entry.isEmpty, !entry.hasPrefix("#") { names.insert((entry as NSString).lastPathComponent) }
+            }
+        }
         for sheet in files where ["cue", "ccd"].contains(sheet.pathExtension.lowercased()) {
             let base = sheet.deletingPathExtension().lastPathComponent
             if sheet.pathExtension.lowercased() == "ccd" {

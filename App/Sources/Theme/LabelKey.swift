@@ -32,7 +32,7 @@ enum LabelKey: String, CaseIterable, Identifiable {
         case .appTitle: return "Emu4ios"
         case .libraryTitle: return "Library"
         case .libraryEmpty: return "No games yet"
-        case .libraryEmptyHint: return "Import your own .gb, .gbc or .gba game files to start playing."
+        case .libraryEmptyHint: return "Import your own game files — Game Boy, NES, SNES, N64, DS, PlayStation, PSP, Genesis and 20+ more consoles."
         case .importGames: return "Import Games"
         case .continuePlaying: return "Continue Playing"
         case .favorites: return "Favorites"
@@ -50,7 +50,7 @@ enum LabelKey: String, CaseIterable, Identifiable {
         case .editController: return "Edit Controller"
         case .speed: return "Speed"
         case .quit: return "Quit Game"
-        case .comingSoon: return "Coming soon"
+        case .comingSoon: return "Supported consoles"
         }
     }
 

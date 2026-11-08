@@ -10,3 +10,5 @@ xcuserdata/
 gallery/.wrangler/
 gallery/deploy.log
 gallery/node_modules/
+App/CoreAssets/
+App/Resources/cores-available.json

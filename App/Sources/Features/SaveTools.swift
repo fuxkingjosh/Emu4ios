@@ -28,7 +28,7 @@ enum SaveTools {
 
     /// A copy named after the game, ready for the share sheet.
     static func exportCopy(for game: Game) throws -> URL {
-        let ext = game.system == .ps1 ? "srm" : "sav"
+        let ext = game.system.usesLibretro ? "srm" : "sav"
         let safe = game.title.components(separatedBy: CharacterSet(charactersIn: "/:\\?%*|\"<>")).joined()
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(safe).\(ext)")
         try? FileManager.default.removeItem(at: url)

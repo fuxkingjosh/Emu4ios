@@ -60,6 +60,16 @@ struct LibraryView: View {
                 if case .success(let urls) = result { library.importFiles(urls) }
             }
             .sheet(item: $editing) { game in GameDetailSheet(gameID: game.id) }
+            .confirmationDialog("Which console is \(library.needsSystemChoice.first ?? "this game") for?",
+                                isPresented: Binding(get: { !library.needsSystemChoice.isEmpty },
+                                                     set: { if !$0, !library.needsSystemChoice.isEmpty { library.needsSystemChoice.removeFirst() } }),
+                                titleVisibility: .visible) {
+                if let file = library.needsSystemChoice.first {
+                    ForEach(SystemDetector.candidates(for: file)) { system in
+                        Button(system.name) { library.assignSystem(system, to: file) }
+                    }
+                }
+            }
             .overlay(alignment: .bottom) {
                 if let message = library.lastImportMessage {
                     Text(message)
@@ -104,7 +114,8 @@ struct LibraryView: View {
             HStack(spacing: 8) {
                 chip(theme.label(.allGames), selected: filter == nil && !favoritesOnly) { filter = nil; favoritesOnly = false }
                 chip(theme.label(.favorites), selected: favoritesOnly) { favoritesOnly.toggle() }
-                ForEach(GameSystem.allCases) { system in
+                // Only consoles you have games for.
+                ForEach(GameSystem.allCases.filter { s in library.games.contains { $0.system == s } }) { system in
                     chip(system.shortName, selected: filter == system) { filter = filter == system ? nil : system }
                 }
             }
@@ -193,6 +204,19 @@ struct LibraryView: View {
             Label(game.favorite ? "Unfavorite" : "Favorite", systemImage: game.favorite ? "star.slash" : "star")
         }
         Button { editing = game } label: { Label("Edit Game", systemImage: "slider.horizontal.3") }
+        Menu {
+            ForEach(GameSystem.Maker.allCases, id: \.self) { maker in
+                Section(maker.rawValue) {
+                    ForEach(GameSystem.allCases.filter { $0.maker == maker }) { system in
+                        Button {
+                            library.changeSystem(of: game, to: system)
+                        } label: {
+                            if system == game.system { Label(system.name, systemImage: "checkmark") } else { Text(system.name) }
+                        }
+                    }
+                }
+            }
+        } label: { Label("Change Console", systemImage: "arrow.triangle.swap") }
     }
 
     private var emptyState: some View {
@@ -214,7 +238,7 @@ struct LibraryView: View {
     private var comingSoon: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(theme.label(.comingSoon)).font(style.font(.headline, weight: .bold)).foregroundStyle(style.primaryText.color)
-            Text(UpcomingSystem.allCases.map(\.rawValue).joined(separator: " · "))
+            Text(GameSystem.available.map(\.shortName).joined(separator: " · "))
                 .font(style.font(.subheadline)).foregroundStyle(style.secondaryText.color)
         }
         .padding(.top, 8)
@@ -264,7 +288,21 @@ struct GameArtwork: View {
         case .gb: return [Color(hue: 0.22, saturation: 0.5, brightness: 0.55), Color(hue: 0.25, saturation: 0.6, brightness: 0.3)]
         case .gbc: return [Color(hue: hue, saturation: 0.65, brightness: 0.85), Color(hue: (hue + 0.1).truncatingRemainder(dividingBy: 1), saturation: 0.7, brightness: 0.5)]
         case .gba: return [Color(hue: 0.72, saturation: 0.55, brightness: 0.7), Color(hue: hue, saturation: 0.6, brightness: 0.45)]
-        case .ps1: return [Color(white: 0.55), Color(hue: hue, saturation: 0.35, brightness: 0.3)]
+        case .ps1, .psp: return [Color(white: 0.55), Color(hue: hue, saturation: 0.35, brightness: 0.3)]
+        default:
+            // Each maker gets its own hue family.
+            let base: Double
+            switch game.system.maker {
+            case .nintendo: base = 0.0
+            case .sega: base = 0.6
+            case .sony: base = 0.65
+            case .nec: base = 0.08
+            case .snk: base = 0.13
+            case .atari: base = 0.03
+            case .computer: base = 0.45
+            }
+            let h2 = (base + hue * 0.12).truncatingRemainder(dividingBy: 1)
+            return [Color(hue: h2, saturation: 0.6, brightness: 0.75), Color(hue: (h2 + 0.06).truncatingRemainder(dividingBy: 1), saturation: 0.7, brightness: 0.38)]
         }
     }
 }

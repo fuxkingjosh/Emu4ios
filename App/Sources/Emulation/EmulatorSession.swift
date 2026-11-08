@@ -15,6 +15,8 @@ final class EmulatorSession: ObservableObject {
         didSet { if isFastForwarding { loop.speed = speedPreset } }
     }
     @Published var toast: String?
+    /// On-screen computer keyboard (DOS, C64, Amiga).
+    @Published var keyboardVisible = false
     @Published private(set) var saveStates: [SaveStateInfo] = []
 
     private var heldInputs: [String: UInt32] = [:]   // touch id → button bits
@@ -40,7 +42,7 @@ final class EmulatorSession: ObservableObject {
         if resumeAutoSave, let auto = saveStates.first(where: { $0.isAuto }) {
             _ = core.loadState(from: auto.url)
         }
-        ClipRecorder.shared.begin(system: game.system, fps: core.fps, sampleRate: core.sampleRate)
+        ClipRecorder.shared.begin(system: game.system, fps: core.fps, sampleRate: AudioOutput.outputRate)
         loop.start()
         loop.paused = false
     }
@@ -86,6 +88,7 @@ final class EmulatorSession: ObservableObject {
         case .quickLoad: quickLoad()
         case .screenshot: takeScreenshot()
         case .clip: saveClip()
+        case .keyboard: keyboardVisible.toggle()
         default:
             let bits = mask ?? input.buttonMask
             heldInputs[touch] = bits
@@ -106,10 +109,43 @@ final class EmulatorSession: ObservableObject {
         pushButtons()
     }
 
-    /// Game controller / keyboard input.
-    func setPhysicalButtons(_ mask: UInt32) {
-        physicalButtons = mask
-        pushButtons()
+    /// Game controller / keyboard input. Port 0 is player 1 (merged with the touch controls).
+    func setPhysicalButtons(_ mask: UInt32, port: Int = 0) {
+        if port == 0 {
+            physicalButtons = mask
+            pushButtons()
+        } else {
+            loop.setButtons(mask, port: port)
+        }
+    }
+
+    /// On-screen or controller analog stick.
+    func setStick(_ input: ControlInput, x: Double, y: Double, port: Int = 0) {
+        loop.setStick(input == .rightStick ? 1 : 0, x: x, y: y, port: port)
+    }
+
+    /// DS touch screen: position in 0…1 of the game picture.
+    func touchScreen(x: Double, y: Double, down: Bool) {
+        loop.setPointer(x: x, y: y, down: down)
+    }
+
+    /// Computer games: the screen works like a laptop trackpad.
+    func moveMouse(dx: Double, dy: Double) { loop.moveMouse(dx: dx, dy: dy) }
+    func mouseButtons(left: Bool, right: Bool) { loop.setMouseButtons(left: left, right: right) }
+
+    /// Computer games: a key from the on-screen or a hardware keyboard.
+    func key(_ code: UInt32, down: Bool, character: UInt32 = 0) {
+        loop.sendKey(KeyEvent(code: code, down: down, character: character))
+    }
+
+    /// Types a character (press + release).
+    func type(_ character: Character) {
+        guard let (code, shift) = RetroKey.code(for: character) else { return }
+        let scalar = character.unicodeScalars.first.map { $0.value } ?? 0
+        if shift { key(RetroKey.leftShift, down: true) }
+        key(code, down: true, character: scalar)
+        key(code, down: false)
+        if shift { key(RetroKey.leftShift, down: false) }
     }
 
     private func pushButtons() {

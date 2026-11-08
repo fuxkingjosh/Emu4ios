@@ -8,6 +8,8 @@ struct ControllerActions {
     var press: (ControlInput, String, UInt32?, Bool) -> Void = { _, _, _, _ in }
     var direction: (String, UInt32) -> Void = { _, _ in }
     var release: (ControlInput, String) -> Void = { _, _ in }
+    /// Analog stick moved: x, y in −1…1 (y down positive). Sent with 0, 0 on release.
+    var analog: (ControlInput, Double, Double) -> Void = { _, _, _ in }
 }
 
 struct ControllerOverlay: UIViewRepresentable {
@@ -37,6 +39,7 @@ final class ControllerTouchView: UIView {
     private var touchButtons: [ObjectIdentifier: String] = [:]
     private var dpadMasks: [ObjectIdentifier: UInt32] = [:]
     private var pressed: [String: UInt32] = [:] // button id → mask (for drawing the D-pad arms)
+    private var stickOffsets: [String: CGPoint] = [:] // button id → knob position (−1…1)
 
     private var generators: [HapticStrength: UIImpactFeedbackGenerator] = [:]
 
@@ -174,6 +177,28 @@ final class ControllerTouchView: UIView {
         hypot(p.x - r.midX, p.y - r.midY)
     }
 
+    /// Virtual Boy right D-pad: same directions, different RetroPad bits.
+    static func translated(_ mask: UInt32, for input: ControlInput) -> UInt32 {
+        guard input == .dpad2 else { return mask }
+        var out: UInt32 = 0
+        if mask & RetroPad.up != 0 { out |= RetroPad.l2 }
+        if mask & RetroPad.down != 0 { out |= RetroPad.l3 }
+        if mask & RetroPad.left != 0 { out |= RetroPad.r2 }
+        if mask & RetroPad.right != 0 { out |= RetroPad.r3 }
+        return out
+    }
+
+    private func stickVector(for spec: ButtonSpec, at point: CGPoint) -> CGPoint {
+        let r = frame(of: spec)
+        let radius = min(r.width, r.height) / 2
+        var dx = (point.x - r.midX) / (radius * 0.75)
+        var dy = (point.y - r.midY) / (radius * 0.75)
+        let length = hypot(dx, dy)
+        if length > 1 { dx /= length; dy /= length }
+        if length < 0.12 { return .zero } // dead zone
+        return CGPoint(x: dx, y: dy)
+    }
+
     private func dpadMask(for spec: ButtonSpec, at point: CGPoint) -> UInt32 {
         let r = frame(of: spec)
         let dx = (point.x - r.midX) / (r.width / 2)
@@ -230,16 +255,23 @@ final class ControllerTouchView: UIView {
         let touchID = "\(key.hashValue)"
         let current = touchButtons[key].flatMap { id in layout.buttons.first { $0.id == id } }
 
-        // Stay on the D-pad while the finger slides around it.
-        if let current, current.input == .dpad, began == false {
+        // Stay on the D-pad / stick while the finger slides around it.
+        if let current, current.input.isDirectional, began == false {
             let mask = dpadMask(for: current, at: point)
             if mask != dpadMasks[key] {
                 if mask != 0 { feedback(current) }
                 dpadMasks[key] = mask
                 pressed[current.id] = mask
-                actions.direction(touchID, mask)
+                actions.direction(touchID, Self.translated(mask, for: current.input))
                 refresh()
             }
+            return
+        }
+        if let current, current.input.isStick, began == false {
+            let v = stickVector(for: current, at: point)
+            stickOffsets[current.id] = v
+            actions.analog(current.input, v.x, v.y)
+            refresh()
             return
         }
 
@@ -249,6 +281,7 @@ final class ControllerTouchView: UIView {
         // Finger slid off one button onto another (or onto nothing).
         if let current {
             actions.release(current.input, touchID)
+            if current.input.isStick { actions.analog(current.input, 0, 0); stickOffsets[current.id] = nil }
             pressed[current.id] = nil
             touchButtons[key] = nil
         }
@@ -257,11 +290,16 @@ final class ControllerTouchView: UIView {
         if !began && target.input.isAction { refresh(); return }
 
         touchButtons[key] = target.id
-        if target.input == .dpad {
+        if target.input.isDirectional {
             let mask = dpadMask(for: target, at: point)
             dpadMasks[key] = mask
             pressed[target.id] = mask
-            actions.press(.dpad, touchID, mask, false)
+            actions.press(target.input, touchID, Self.translated(mask, for: target.input), false)
+        } else if target.input.isStick {
+            let v = stickVector(for: target, at: point)
+            stickOffsets[target.id] = v
+            pressed[target.id] = 1
+            actions.analog(target.input, v.x, v.y)
         } else {
             pressed[target.id] = 1
             actions.press(target.input, touchID, nil, target.turbo)
@@ -274,6 +312,7 @@ final class ControllerTouchView: UIView {
         let key = ObjectIdentifier(touch)
         guard let id = touchButtons[key], let spec = layout.buttons.first(where: { $0.id == id }) else { return }
         actions.release(spec.input, "\(key.hashValue)")
+        if spec.input.isStick { actions.analog(spec.input, 0, 0); stickOffsets[id] = nil }
         touchButtons[key] = nil
         dpadMasks[key] = nil
         pressed[id] = nil
@@ -330,7 +369,8 @@ final class ControllerTouchView: UIView {
     private func drawButtons() {
         guard let ctx = UIGraphicsGetCurrentContext() else { return }
         for spec in layout.buttons where !spec.hidden && !spec.hasImage {
-            ButtonRenderer.draw(spec, in: frame(of: spec), pressedMask: pressed[spec.id], context: ctx)
+            ButtonRenderer.draw(spec, in: frame(of: spec), pressedMask: pressed[spec.id], context: ctx,
+                                stick: stickOffsets[spec.id] ?? .zero)
         }
     }
 }
@@ -382,7 +422,8 @@ enum ButtonRenderer {
     }
 
     /// `scale` shrinks labels and borders for small previews (1 = real size).
-    static func draw(_ spec: ButtonSpec, in r: CGRect, pressedMask: UInt32?, context ctx: CGContext, scale: CGFloat = 1) {
+    static func draw(_ spec: ButtonSpec, in r: CGRect, pressedMask: UInt32?, context ctx: CGContext, scale: CGFloat = 1,
+                     stick: CGPoint = .zero) {
         var spec = spec
         spec.labelSize *= scale
         spec.borderWidth *= scale
@@ -397,8 +438,10 @@ enum ButtonRenderer {
             ctx.restoreGState()
             return
         }
-        if spec.input == .dpad {
+        if spec.input.isDirectional {
             drawDPad(spec, in: r, mask: pressedMask ?? 0, context: ctx)
+        } else if spec.input.isStick {
+            drawStick(spec, in: r, offset: stick, active: pressedMask != nil)
         } else {
             let isPressed = pressedMask != nil
             let p = path(for: spec.shape, in: r.insetBy(dx: spec.borderWidth / 2, dy: spec.borderWidth / 2))
@@ -412,6 +455,24 @@ enum ButtonRenderer {
             drawLabel(spec.displayLabel, color: spec.labelColor.uiColor, size: spec.labelSize, in: r)
         }
         ctx.restoreGState()
+    }
+
+    private static func drawStick(_ spec: ButtonSpec, in r: CGRect, offset: CGPoint, active: Bool) {
+        let side = min(r.width, r.height)
+        let square = CGRect(x: r.midX - side / 2, y: r.midY - side / 2, width: side, height: side)
+        let base = UIBezierPath(ovalIn: square.insetBy(dx: spec.borderWidth, dy: spec.borderWidth))
+        spec.fill.uiColor.setFill(); base.fill()
+        if spec.borderWidth > 0 { spec.border.uiColor.setStroke(); base.lineWidth = spec.borderWidth; base.stroke() }
+        let knobSize = side * 0.48
+        let travel = (side - knobSize) / 2
+        let knob = UIBezierPath(ovalIn: CGRect(x: square.midX - knobSize / 2 + offset.x * travel,
+                                               y: square.midY - knobSize / 2 + offset.y * travel,
+                                               width: knobSize, height: knobSize))
+        (active ? spec.pressedFill : spec.fill).uiColor.setFill(); knob.fill()
+        spec.border.uiColor.setStroke(); knob.lineWidth = max(1, spec.borderWidth); knob.stroke()
+        if let label = spec.label, !label.isEmpty {
+            drawLabel(label, color: spec.labelColor.uiColor, size: spec.labelSize, in: knob.bounds)
+        }
     }
 
     private static func drawDPad(_ spec: ButtonSpec, in r: CGRect, mask: UInt32, context ctx: CGContext) {

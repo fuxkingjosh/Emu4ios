@@ -19,8 +19,50 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  matrix:
+    name: List cores
+    runs-on: ubuntu-latest
+    outputs:
+      cores: ${{ steps.list.outputs.cores }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        run: echo "cores=$(python3 -c 'import json;print(json.dumps([c["id"] for c in json.load(open("cores/cores.json"))["cores"]]))')" >> "$GITHUB_OUTPUT"
+
+  cores:
+    name: Core ${{ matrix.core }}
+    needs: matrix
+    runs-on: macos-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        core: ${{ fromJSON(needs.matrix.outputs.cores) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Cache core
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: Vendor/Cores
+          key: core-${{ matrix.core }}-${{ hashFiles('cores/cores.json', 'scripts/build-core.sh') }}
+      - name: Build core for iPhone
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: ./scripts/build-core.sh ${{ matrix.core }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: core-${{ matrix.core }}
+          path: Vendor/Cores
+          include-hidden-files: true
+          retention-days: 3
+
   build:
     name: Build app (cloud Mac)
+    needs: cores
+    if: ${{ !cancelled() }}
     runs-on: macos-latest
     timeout-minutes: 60
     steps:
@@ -37,14 +79,24 @@ jobs:
       - name: Cache mGBA build
         uses: actions/cache@v4
         with:
-          path: Vendor
-          key: cores-${{ hashFiles('scripts/build-mgba.sh', 'scripts/gen-mgba-defines.sh', 'scripts/build-pcsx.sh') }}
+          path: |
+            Vendor/mGBA.xcframework
+            Vendor/mgba-include
+            Vendor/.mgba-commit
+          key: mgba-${{ hashFiles('scripts/build-mgba.sh', 'scripts/gen-mgba-defines.sh') }}
 
       - name: Build mGBA for iOS
         run: ./scripts/build-mgba.sh
 
-      - name: Build PCSX-ReARMed (PlayStation) for iOS
-        run: ./scripts/build-pcsx.sh
+      - name: Collect cores
+        uses: actions/download-artifact@v4
+        with:
+          pattern: core-*
+          path: Vendor/Cores
+          merge-multiple: true
+
+      - name: Use only the cores that built
+        run: python3 scripts/prune-missing-cores.py
 
       - name: Generate Xcode project
         run: xcodegen generate
@@ -90,7 +142,7 @@ jobs:
             pkill -9 -f "Emu4ios.app/Emu4ios" 2>/dev/null || true
             sleep 1
           }
-          for theme in builtin.midnight builtin.neon builtin.dmg builtin.candy; do
+          for theme in builtin.midnight builtin.dmg; do
             name=${theme#builtin.}
             stop
             xcrun simctl spawn "$DEVICE" defaults write $BID activeThemeID "$theme"
@@ -103,22 +155,34 @@ jobs:
           xcrun simctl spawn "$DEVICE" defaults write $BID activeThemeID builtin.midnight
           xcrun simctl launch "$DEVICE" $BID -E4StartTab themes; shoot "themes" 6
           stop
-          xcrun simctl launch "$DEVICE" $BID -E4OpenEditor gba; shoot "editor-gba" 6
+          xcrun simctl launch "$DEVICE" $BID -E4OpenEditor n64; shoot "editor-n64" 6
           stop
           xcrun simctl launch "$DEVICE" $BID -E4StartTab settings; shoot "settings" 5
           stop
-          xcrun simctl launch "$DEVICE" $BID -E4StartTab stats; shoot "stats" 5
+          # Every console: boot its test program, screenshot, and check the app is still alive.
+          python3 Tests/make_test_roms.py roms
+          ( curl -fsSL -o freedoom.zip https://github.com/freedoom/freedoom/releases/download/v0.13.0/freedoom-0.13.0.zip \
+            && unzip -j -o freedoom.zip "*/freedoom1.wad" -d roms ) || echo "freedoom download failed"
+          cp roms/* "$DATA/Documents/Games/"
+          echo "system,file,result" > shots/systems.csv
+          for f in roms/*; do
+            file=$(basename "$f")
+            stop
+            xcrun simctl launch "$DEVICE" $BID -E4AutoPlay "$file" > /dev/null
+            sleep 9
+            if pgrep -f "Emu4ios.app/Emu4ios" > /dev/null; then result=running; else result=CRASHED; fi
+            xcrun simctl io "$DEVICE" screenshot "shots/sys-$file.png"
+            echo "${file##*.},$file,$result" >> shots/systems.csv
+          done
+          cat shots/systems.csv
+          # Crash reports, if any.
+          mkdir -p shots/crashes
+          find ~/Library/Logs/DiagnosticReports -name "Emu4ios*" -mmin -60 -exec cp {} shots/crashes/ \; 2>/dev/null || true
           stop
-          xcrun simctl launch "$DEVICE" $BID; shoot "library-after-play" 5
+          xcrun simctl launch "$DEVICE" $BID; shoot "library-after-play" 6
           stop
           # PlayStation last, with diagnostics if the app won't close afterwards.
           xcrun simctl launch "$DEVICE" $BID -E4AutoPlay "E4 PS1 Demo.exe"; shoot "game-ps1" 8
-          PID=$(pgrep -f "Emu4ios.app/Emu4ios" | head -1)
-          echo "PS1 app pid: $PID"
-          sample "$PID" 3 -file shots/ps1-sample.txt || true
-          ( xcrun simctl terminate "$DEVICE" $BID & ); sleep 8
-          ps -o pid,stat,wchan,command -p "$PID" > shots/ps1-after-terminate.txt 2>&1 || true
-          sample "$PID" 3 -file shots/ps1-sample-after.txt || true
           ls -la shots
 
       - name: Publish screenshots to the ci-screenshots branch
@@ -172,12 +236,23 @@ jobs:
 
       - uses: actions/cache@v4
         with:
-          path: Vendor
-          key: cores-${{ hashFiles('scripts/build-mgba.sh', 'scripts/gen-mgba-defines.sh', 'scripts/build-pcsx.sh') }}
+          path: |
+            Vendor/mGBA.xcframework
+            Vendor/mgba-include
+            Vendor/.mgba-commit
+          key: mgba-${{ hashFiles('scripts/build-mgba.sh', 'scripts/gen-mgba-defines.sh') }}
 
       - run: ./scripts/build-mgba.sh
 
-      - run: ./scripts/build-pcsx.sh
+      - name: Collect cores
+        uses: actions/download-artifact@v4
+        with:
+          pattern: core-*
+          path: Vendor/Cores
+          merge-multiple: true
+
+      - name: Use only the cores that built
+        run: python3 scripts/prune-missing-cores.py
 
       - name: Generate project
         run: xcodegen generate
@@ -217,7 +292,7 @@ jobs:
 
   ipa:
     name: Build IPA for sideloading (AltStore / SideStore)
-    needs: build
+    needs: [build]
     if: github.event_name != 'pull_request'
     runs-on: macos-latest
     timeout-minutes: 60
@@ -232,12 +307,23 @@ jobs:
 
       - uses: actions/cache@v4
         with:
-          path: Vendor
-          key: cores-${{ hashFiles('scripts/build-mgba.sh', 'scripts/gen-mgba-defines.sh', 'scripts/build-pcsx.sh') }}
+          path: |
+            Vendor/mGBA.xcframework
+            Vendor/mgba-include
+            Vendor/.mgba-commit
+          key: mgba-${{ hashFiles('scripts/build-mgba.sh', 'scripts/gen-mgba-defines.sh') }}
 
       - run: ./scripts/build-mgba.sh
 
-      - run: ./scripts/build-pcsx.sh
+      - name: Collect cores
+        uses: actions/download-artifact@v4
+        with:
+          pattern: core-*
+          path: Vendor/Cores
+          merge-multiple: true
+
+      - name: Use only the cores that built
+        run: python3 scripts/prune-missing-cores.py
 
       - run: xcodegen generate
 

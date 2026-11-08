@@ -63,9 +63,11 @@ final class EmulationLoop: @unchecked Sendable {
     let core: EmulatorCore
     let frame: FrameBuffer
     let audio: AudioOutput
+    private let resampler: AudioResampler
 
     private let lock = NSLock()
-    private var _buttons: UInt32 = 0
+    private var _input = InputFrame()
+    private var _keys: [KeyEvent] = []
     private var _turboButtons: UInt32 = 0
     private var _paused = true
     private var _speed: Double = 1
@@ -88,7 +90,8 @@ final class EmulationLoop: @unchecked Sendable {
         self.core = core
         let size = core.videoSize
         frame = FrameBuffer(width: size.width, height: size.height)
-        audio = AudioOutput(sampleRate: core.sampleRate)
+        audio = AudioOutput()
+        resampler = AudioResampler(inputRate: core.sampleRate, outputRate: AudioOutput.outputRate)
         let stateSize = core.saveState()?.count ?? 400_000
         // Big states (PlayStation ≈ 4 MB) are captured less often to keep memory in check.
         rewind = RewindBuffer(stateSize: stateSize, interval: stateSize > 1_000_000 ? 20 : 10)
@@ -96,10 +99,38 @@ final class EmulationLoop: @unchecked Sendable {
 
     // MARK: Controls (any thread)
 
+    /// Player 1's buttons (touch controls + first controller).
     var buttons: UInt32 {
-        get { lock.withLock { _buttons } }
-        set { lock.withLock { _buttons = newValue } }
+        get { lock.withLock { _input.ports[0] } }
+        set { lock.withLock { _input.ports[0] = newValue } }
     }
+    /// Players 2–4 (extra controllers).
+    func setButtons(_ mask: UInt32, port: Int) {
+        guard (1..<4).contains(port) else { return }
+        lock.withLock { _input.ports[port] = mask }
+    }
+    /// stick 0 = left, 1 = right; values −1…1.
+    func setStick(_ stick: Int, x: Double, y: Double, port: Int = 0) {
+        guard (0..<4).contains(port), (0..<2).contains(stick) else { return }
+        let v = SIMD2<Int16>(Int16(clamping: Int((max(-1, min(1, x)) * 32767).rounded())),
+                             Int16(clamping: Int((max(-1, min(1, y)) * 32767).rounded())))
+        lock.withLock { _input.sticks[port][stick] = v }
+    }
+    /// Touch screen position in 0…1 of the picture.
+    func setPointer(x: Double, y: Double, down: Bool) {
+        let px = Int16(clamping: Int(((max(0, min(1, x)) * 2) - 1) * 32767))
+        let py = Int16(clamping: Int(((max(0, min(1, y)) * 2) - 1) * 32767))
+        lock.withLock { _input.pointer = SIMD2(px, py); _input.pointerDown = down }
+    }
+    func moveMouse(dx: Double, dy: Double) {
+        lock.withLock {
+            _input.mouseDelta &+= SIMD2(Int16(clamping: Int(dx.rounded())), Int16(clamping: Int(dy.rounded())))
+        }
+    }
+    func setMouseButtons(left: Bool, right: Bool) {
+        lock.withLock { _input.mouseLeft = left; _input.mouseRight = right }
+    }
+    func sendKey(_ event: KeyEvent) { lock.withLock { _keys.append(event) } }
     var turboButtons: UInt32 {
         get { lock.withLock { _turboButtons } }
         set { lock.withLock { _turboButtons = newValue } }
@@ -171,11 +202,15 @@ final class EmulationLoop: @unchecked Sendable {
         var lastTick = CACurrentMediaTime()
 
         while running {
-            let (work, isPaused, speed, isRewinding, rewindOn, held, turbo) = lock.withLock {
+            let (work, isPaused, speed, isRewinding, rewindOn, input, turbo, keys) = lock.withLock {
                 let w = pendingWork; pendingWork.removeAll()
-                return (w, _paused, _speed, _rewinding, _rewindEnabled, _buttons, _turboButtons)
+                let k = _keys; _keys.removeAll()
+                let i = _input
+                _input.mouseDelta = .zero
+                return (w, _paused, _speed, _rewinding, _rewindEnabled, i, _turboButtons, k)
             }
             work.forEach { $0(core) }
+            keys.forEach { core.sendKey($0) }
 
             let now = CACurrentMediaTime()
             if isPaused {
@@ -193,7 +228,7 @@ final class EmulationLoop: @unchecked Sendable {
                 if frameCount % 3 == 0, let state = lock.withLock({ rewind.pop() }) {
                     core.loadState(state)
                 }
-                core.setButtons(0)
+                core.setInput(InputFrame())
                 core.runFrame()
                 _ = core.readAudio(into: &audioScratch, maxFrames: 4_096) // discard audio while rewinding
                 publishFrame()
@@ -204,16 +239,21 @@ final class EmulationLoop: @unchecked Sendable {
                 let framesThisTick = max(1, Int(speed.rounded(.down)))
                 for i in 0..<framesThisTick {
                     let turboOn = (frameCount / 4) % 2 == 0
-                    core.setButtons(held | (turboOn ? turbo : 0))
+                    var frameInput = input
+                    frameInput.ports[0] |= turboOn ? turbo : 0
+                    if i > 0 { frameInput.mouseDelta = .zero } // mouse movement counts once
+                    core.setInput(frameInput)
                     core.runFrame()
                     frameCount &+= 1
                     let produced = audioScratch.withUnsafeMutableBufferPointer {
                         core.readAudio(into: $0.baseAddress!, maxFrames: 4_096)
                     }
                     if speed <= 1.01, produced > 0 {
-                        audioScratch.withUnsafeBufferPointer {
-                            audio.ring.write($0.baseAddress!, frames: produced)
-                            ClipRecorder.shared.appendAudio(samples: $0.baseAddress!, frames: produced)
+                        audioScratch.withUnsafeBufferPointer { raw in
+                            resampler.process(raw.baseAddress!, frames: produced) { samples, frames in
+                                audio.ring.write(samples, frames: frames)
+                                ClipRecorder.shared.appendAudio(samples: samples, frames: frames)
+                            }
                         }
                     }
                     if rewindOn {
@@ -233,7 +273,7 @@ final class EmulationLoop: @unchecked Sendable {
 
             // Keep audio from drifting: if the buffer runs low, run slightly faster; if high, slower.
             if speed <= 1.01, !isRewinding {
-                let buffered = Double(audio.ring.bufferedFrames) / core.sampleRate
+                let buffered = Double(audio.ring.bufferedFrames) / AudioOutput.outputRate
                 if buffered < 0.03 { next -= frameTime * 0.05 }
                 if buffered > 0.12 { next += frameTime * 0.05 }
             }

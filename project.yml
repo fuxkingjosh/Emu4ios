@@ -19,12 +19,108 @@ targets:
       - path: App/Sources
       - path: App/Bridge
       - path: App/Resources
+      - path: App/CoreAssets
+        type: folder
+        buildPhase: resources
+        optional: true
     dependencies:
       - framework: Vendor/mGBA.xcframework
         embed: false
-      - framework: Vendor/PCSXReARMed.xcframework
-        embed: false
+      - framework: Vendor/Cores/PCSXReARMed.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/Mesen.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/BSNES.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/ClownMDEmu.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/Gearsystem.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/Mupen64Plus.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/MednafenPCE.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/Geargrafx.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/MednafenNGP.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/MednafenWSwan.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/MednafenVB.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/MednafenLynx.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/Stella.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/A5200.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/ProSystem.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/VirtualJaguar.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/PokeMini.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/VICE.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/PUAE.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/DOSBoxPure.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/PrBoom.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/MelonDSDS.xcframework
+        embed: true
+        link: false
+        codeSign: true
+      - framework: Vendor/Cores/PPSSPP.xcframework
+        embed: true
+        link: false
+        codeSign: true
       - sdk: libz.tbd
+      - sdk: OpenGLES.framework
+      - sdk: libc++.tbd
       - target: Emu4iosWidget
     entitlements:
       path: App/Emu4ios.entitlements
@@ -38,6 +134,7 @@ targets:
         HEADER_SEARCH_PATHS: $(SRCROOT)/Vendor/mgba-include
         GCC_C_LANGUAGE_STANDARD: gnu11
         "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIcon-Neon AppIcon-Retro AppIcon-Candy AppIcon-Midnight AppIcon-Gold AppIcon-Ocean AppIcon-Lava AppIcon-Mint AppIcon-BigFour"
         ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
@@ -85,6 +182,9 @@ targets:
           - CFBundleTypeName: Game Boy Advance Game
             LSHandlerRank: Owner
             LSItemContentTypes: [com.fuxkingjosh.emu4ios.gba]
+          - CFBundleTypeName: Retro Game
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [com.fuxkingjosh.emu4ios.rom]
           - CFBundleTypeName: Emu4ios Theme
             LSHandlerRank: Owner
             LSItemContentTypes: [com.fuxkingjosh.emu4ios.theme]
@@ -96,6 +196,11 @@ targets:
               public.filename-extension: [e4theme]
               public.mime-type: application/x-emu4ios-theme
         UTImportedTypeDeclarations:
+          - UTTypeIdentifier: com.fuxkingjosh.emu4ios.rom
+            UTTypeDescription: Retro Game
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [nes, fds, sfc, smc, n64, z64, v64, nds, md, gen, smd, sms, gg, sg, pce, sgx, ngp, ngc, ws, wsc, vb, lnx, a26, a52, a78, j64, min, cue, chd, cso, pbp, m3u, d64, t64, prg, crt, adf, hdf, wad, dosz]
           - UTTypeIdentifier: com.fuxkingjosh.emu4ios.gb
             UTTypeDescription: Game Boy ROM
             UTTypeConformsTo: [public.data]

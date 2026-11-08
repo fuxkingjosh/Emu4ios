@@ -23,21 +23,45 @@ actor CoverArtService {
     }
 
     private static func repoName(_ system: GameSystem) -> (dat: String, thumbs: String) {
+        (system.thumbnailDatabase, system.thumbnailRepo)
+    }
+
+    /// Systems that share box art collections (a GB game may be filed under GBC and the other way round).
+    private static func relatives(of system: GameSystem) -> [GameSystem] {
         switch system {
-        case .gb: return ("Nintendo - Game Boy", "Nintendo_-_Game_Boy")
-        case .gbc: return ("Nintendo - Game Boy Color", "Nintendo_-_Game_Boy_Color")
-        case .gba: return ("Nintendo - Game Boy Advance", "Nintendo_-_Game_Boy_Advance")
-        case .ps1: return ("Sony - PlayStation", "Sony_-_PlayStation")
+        case .gb: return [.gbc]
+        case .gbc: return [.gb]
+        case .ngp: return [.ngpc]
+        case .ngpc: return [.ngp]
+        case .wswan: return [.wswanc]
+        case .wswanc: return [.wswan]
+        case .pce: return [.supergrafx]
+        case .supergrafx: return [.pce]
+        case .sms: return [.gamegear, .sg1000]
+        default: return []
+        }
+    }
+
+    /// Bytes to skip before fingerprinting (copier / emulator headers that No-Intro leaves out).
+    private static func headerSize(_ data: Data, system: GameSystem) -> Int {
+        switch system {
+        case .nes: return data.prefix(4) == Data([0x4E, 0x45, 0x53, 0x1A]) ? 16 : 0
+        case .snes: return data.count % 1024 == 512 ? 512 : 0
+        case .lynx: return data.prefix(4) == Data("LYNX".utf8) ? 64 : 0
+        case .atari7800: return data.count > 128 && data[1..<10] == Data("ATARI7800".utf8) ? 128 : 0
+        default: return 0
         }
     }
 
     // MARK: Lookup
 
     func lookup(romURL: URL, system: GameSystem) async -> Match? {
-        if system == .ps1 { return await lookupDisc(romURL: romURL) }
+        if !system.matchesByChecksum { return await lookupByName(romURL: romURL, system: system) }
         guard let data = try? Data(contentsOf: romURL, options: .mappedIfSafe) else { return nil }
+        let skip = Self.headerSize(data, system: system)
         let crc = data.withUnsafeBytes { raw -> UInt32 in
-            UInt32(crc32(0, raw.bindMemory(to: Bytef.self).baseAddress, uInt(data.count)))
+            let base = raw.bindMemory(to: Bytef.self).baseAddress.map { $0 + skip }
+            return UInt32(crc32(0, base, uInt(max(0, data.count - skip))))
         }
         let names = await database(for: system)
         var name = names[crc]
@@ -48,18 +72,19 @@ actor CoverArtService {
         }
         // Different system folder (e.g. GB game that's in the GBC set)?
         if name == nil {
-            for other in GameSystem.allCases where other != system && other != .ps1 {
+            for other in Self.relatives(of: system) {
                 if let n = await database(for: other)[crc] { name = n; break }
             }
         }
-        guard let name else { return nil }
+        // Hacks, translations and odd dumps: fall back to the file name.
+        guard let name else { return await lookupByName(romURL: romURL, system: system) }
         let image = await boxArt(named: name, system: system)
         return Match(databaseName: name, cleanTitle: Self.clean(name), image: image)
     }
 
-    /// Disc images are too big to fingerprint quickly, so PlayStation art is matched by file name
-    /// (most dumps already use the official "Game Name (USA)" naming).
-    private func lookupDisc(romURL: URL) async -> Match? {
+    /// Disc images are too big to fingerprint quickly (and computer games have no database), so their art
+    /// is matched by file name — most dumps already use the official "Game Name (USA)" naming.
+    private func lookupByName(romURL: URL, system: GameSystem) async -> Match? {
         var name = romURL.deletingPathExtension().lastPathComponent
         name = name.replacingOccurrences(of: #"\s*\(Track \d+\)"#, with: "", options: .regularExpression)
         var candidates = [name]
@@ -69,7 +94,7 @@ actor CoverArtService {
             candidates.append("\(name) (\(region))")
         }
         for candidate in candidates {
-            if let image = await boxArt(named: candidate, system: .ps1, searchOtherSystems: false) {
+            if let image = await boxArt(named: candidate, system: system, searchOtherSystems: false) {
                 return Match(databaseName: candidate, cleanTitle: Self.clean(candidate), image: image)
             }
         }
@@ -92,7 +117,7 @@ actor CoverArtService {
         // Fall back to the same game without revision tags, then without any tags.
         let noRev = safe.replacingOccurrences(of: #"\s*\((Rev|v)\s*[^)]*\)"#, with: "", options: .regularExpression)
         if noRev != safe { candidates.append(noRev) }
-        let systems = searchOtherSystems ? [system] + GameSystem.allCases.filter({ $0 != system && $0 != .ps1 }) : [system]
+        let systems = searchOtherSystems ? [system] + Self.relatives(of: system) : [system]
         for system in systems {
             let repo = Self.repoName(system).thumbs
             for candidate in candidates {

@@ -4,14 +4,22 @@ enum ControlInput: String, Codable, CaseIterable, Identifiable {
     case dpad, a, b, l, r, start, select
     // PlayStation
     case cross, circle, square, triangle, l2, r2
+    // Super Nintendo / DS / Genesis 6-button and friends
+    case x, y, l3, r3
+    // Second D-pad (Virtual Boy), analog sticks, N64 C buttons
+    case dpad2, leftStick, rightStick, cUp, cDown, cLeft, cRight
     // App actions that can be placed on the controller like any button.
-    case menu, fastForward, rewind, quickSave, quickLoad, screenshot, clip
+    case menu, fastForward, rewind, quickSave, quickLoad, screenshot, clip, keyboard
 
     var id: String { rawValue }
 
     var isAction: Bool {
-        [.menu, .fastForward, .rewind, .quickSave, .quickLoad, .screenshot, .clip].contains(self)
+        [.menu, .fastForward, .rewind, .quickSave, .quickLoad, .screenshot, .clip, .keyboard].contains(self)
     }
+
+    /// Inputs that slide like a D-pad (finger can move around without lifting).
+    var isDirectional: Bool { self == .dpad || self == .dpad2 }
+    var isStick: Bool { self == .leftStick || self == .rightStick }
 
     var defaultLabel: String {
         switch self {
@@ -29,6 +37,16 @@ enum ControlInput: String, Codable, CaseIterable, Identifiable {
         case .quickLoad: return "LOAD"
         case .screenshot: return "📷"
         case .clip: return "CLIP"
+        case .keyboard: return "⌨︎"
+        case .x: return "X"
+        case .y: return "Y"
+        case .l3: return "L3"
+        case .r3: return "R3"
+        case .dpad2, .leftStick, .rightStick: return ""
+        case .cUp: return "C▲"
+        case .cDown: return "C▼"
+        case .cLeft: return "C◀"
+        case .cRight: return "C▶"
         case .cross: return "✕"
         case .circle: return "○"
         case .square: return "□"
@@ -45,6 +63,16 @@ enum ControlInput: String, Codable, CaseIterable, Identifiable {
         case .quickSave: return "Quick Save"
         case .quickLoad: return "Quick Load"
         case .clip: return "Save Clip"
+        case .keyboard: return "Keyboard"
+        case .dpad2: return "Second D-Pad"
+        case .leftStick: return "Left Stick"
+        case .rightStick: return "Right Stick"
+        case .cUp: return "C Up"
+        case .cDown: return "C Down"
+        case .cLeft: return "C Left"
+        case .cRight: return "C Right"
+        case .l3: return "L3"
+        case .r3: return "R3"
         case .l2: return "L2"
         case .r2: return "R2"
         default: return rawValue.prefix(1).uppercased() + rawValue.dropFirst()
@@ -64,6 +92,14 @@ enum ControlInput: String, Codable, CaseIterable, Identifiable {
         case .r2: return RetroPad.r2
         case .start: return RetroPad.start
         case .select: return RetroPad.select
+        case .x: return RetroPad.x
+        case .y: return RetroPad.y
+        case .l3: return RetroPad.l3
+        case .r3: return RetroPad.r3
+        case .cUp: return RetroPad.cUp
+        case .cDown: return RetroPad.cDown
+        case .cLeft: return RetroPad.cLeft
+        case .cRight: return RetroPad.cRight
         default: return 0
         }
     }
@@ -188,6 +224,10 @@ struct ControllerSkin: Codable, Hashable {
             for input in system.inputs where !l.buttons.contains(where: { $0.input == input }) {
                 if let spec = reference.buttons.first(where: { $0.input == input }) { l.buttons.append(spec) }
             }
+            // Name buttons the way this console does (Genesis "A" is the C-button bit, and so on).
+            for i in l.buttons.indices where l.buttons[i].label == nil {
+                l.buttons[i].label = system.label(for: l.buttons[i].input)
+            }
             return l
         }
         copy.portrait = adapt(portrait, portrait: true)
@@ -195,97 +235,35 @@ struct ControllerSkin: Codable, Hashable {
         return copy
     }
 
-    // MARK: Default layouts
-
-    static func standard(for system: GameSystem) -> ControllerSkin {
-        if system == .ps1 { return standardPlayStation() }
-        let aspect = system.screenSize.width / system.screenSize.height
-        let hasShoulders = system == .gba
-
-        // Portrait: screen on top, controls below.
-        let screenH = min(0.42, 1.0 / aspect * 0.55)
-        var p: [ButtonSpec] = [
-            ButtonSpec(input: .dpad, frame: NormRect(x: 0.05, y: 0.60, w: 0.40, h: 0.20), shape: .roundedRect),
-            ButtonSpec(input: .a, frame: NormRect(x: 0.74, y: 0.60, w: 0.20, h: 0.095)),
-            ButtonSpec(input: .b, frame: NormRect(x: 0.55, y: 0.69, w: 0.20, h: 0.095)),
-            ButtonSpec(input: .select, frame: NormRect(x: 0.28, y: 0.86, w: 0.20, h: 0.04), shape: .pill, labelSize: 11),
-            ButtonSpec(input: .start, frame: NormRect(x: 0.52, y: 0.86, w: 0.20, h: 0.04), shape: .pill, labelSize: 11),
-            ButtonSpec(input: .menu, frame: NormRect(x: 0.44, y: 0.93, w: 0.12, h: 0.04), shape: .pill, labelSize: 14),
-            ButtonSpec(input: .fastForward, frame: NormRect(x: 0.82, y: 0.93, w: 0.12, h: 0.04), shape: .pill, labelSize: 14),
-            ButtonSpec(input: .rewind, frame: NormRect(x: 0.06, y: 0.93, w: 0.12, h: 0.04), shape: .pill, labelSize: 14),
-        ]
-        if hasShoulders {
-            p.append(ButtonSpec(input: .l, frame: NormRect(x: 0.03, y: 0.52, w: 0.24, h: 0.045), shape: .pill, labelSize: 14))
-            p.append(ButtonSpec(input: .r, frame: NormRect(x: 0.73, y: 0.52, w: 0.24, h: 0.045), shape: .pill, labelSize: 14))
+    /// This system's default layout, painted like `style` (used when a theme has no layout for a system yet).
+    static func standard(for system: GameSystem, styledLike style: ControllerSkin) -> ControllerSkin {
+        var skin = standard(for: system)
+        func paint(_ layout: inout ControllerLayout, from source: ControllerLayout) {
+            layout.deckColor = source.deckColor
+            layout.decorations = source.decorations
+            let face = source.buttons.first { !$0.input.isAction && !$0.input.isDirectional && !$0.input.isStick && $0.shape != .pill }
+            let pillStyle = source.buttons.first { $0.shape == .pill }
+            let pad = source.buttons.first { $0.input == .dpad }
+            for i in layout.buttons.indices {
+                let b = layout.buttons[i]
+                let match = source.buttons.first { $0.input == b.input }
+                    ?? (b.input.isDirectional || b.input.isStick ? pad : (b.shape == .pill ? pillStyle : face))
+                guard let m = match else { continue }
+                var n = b
+                n.fill = m.fill; n.pressedFill = m.pressedFill; n.border = m.border; n.borderWidth = m.borderWidth
+                n.opacity = m.opacity; n.haptic = m.haptic; n.sound = m.sound; n.hapticPattern = m.hapticPattern
+                if b.input.symbolColor == nil { n.labelColor = m.labelColor }
+                if b.input.isDirectional { n.dpadStyle = m.dpadStyle }
+                if m.input == b.input { n.imageData = m.imageData; n.pressedImageData = m.pressedImageData }
+                layout.buttons[i] = n
+            }
         }
-        let portrait = ControllerLayout(screen: NormRect(x: 0, y: 0.06, w: 1, h: screenH), buttons: p)
-
-        // Landscape: screen centered, controls on the sides.
-        let screenW = 0.56
-        var l: [ButtonSpec] = [
-            ButtonSpec(input: .dpad, frame: NormRect(x: 0.03, y: 0.40, w: 0.18, h: 0.42), shape: .roundedRect),
-            ButtonSpec(input: .a, frame: NormRect(x: 0.88, y: 0.42, w: 0.10, h: 0.20)),
-            ButtonSpec(input: .b, frame: NormRect(x: 0.79, y: 0.60, w: 0.10, h: 0.20)),
-            ButtonSpec(input: .select, frame: NormRect(x: 0.04, y: 0.88, w: 0.11, h: 0.08), shape: .pill, labelSize: 10),
-            ButtonSpec(input: .start, frame: NormRect(x: 0.85, y: 0.88, w: 0.11, h: 0.08), shape: .pill, labelSize: 10),
-            ButtonSpec(input: .menu, frame: NormRect(x: 0.46, y: 0.90, w: 0.08, h: 0.08), shape: .pill, labelSize: 13),
-            ButtonSpec(input: .fastForward, frame: NormRect(x: 0.89, y: 0.24, w: 0.08, h: 0.10), shape: .pill, labelSize: 13),
-            ButtonSpec(input: .rewind, frame: NormRect(x: 0.03, y: 0.24, w: 0.08, h: 0.10), shape: .pill, labelSize: 13),
-        ]
-        if hasShoulders {
-            l.append(ButtonSpec(input: .l, frame: NormRect(x: 0.02, y: 0.05, w: 0.15, h: 0.12), shape: .pill, labelSize: 14))
-            l.append(ButtonSpec(input: .r, frame: NormRect(x: 0.83, y: 0.05, w: 0.15, h: 0.12), shape: .pill, labelSize: 14))
-        }
-        let landscape = ControllerLayout(
-            screen: NormRect(x: (1 - screenW) / 2, y: 0.03, w: screenW, h: 0.86), buttons: l)
-
-        return ControllerSkin(portrait: portrait, landscape: landscape)
-    }
-
-    /// PlayStation layout: four face buttons in a diamond, two shoulder buttons per side.
-    static func standardPlayStation() -> ControllerSkin {
-        func face(_ input: ControlInput, _ x: Double, _ y: Double, _ w: Double, _ h: Double) -> ButtonSpec {
-            var b = ButtonSpec(input: input, frame: NormRect(x: x, y: y, w: w, h: h), labelSize: 22)
-            b.labelColor = input.symbolColor ?? b.labelColor
-            return b
-        }
-        let pw = 0.15, ph = pw * 0.46 // circles on a ~9:19.5 phone
-        let pcx = 0.73, pcy = 0.70
-        let portrait = ControllerLayout(screen: NormRect(x: 0, y: 0.06, w: 1, h: 0.36), buttons: [
-            ButtonSpec(input: .dpad, frame: NormRect(x: 0.04, y: 0.59, w: 0.40, h: 0.185), shape: .roundedRect),
-            face(.triangle, pcx - pw / 2, pcy - ph * 1.5, pw, ph),
-            face(.circle, pcx + pw * 0.5, pcy - ph / 2, pw, ph),
-            face(.cross, pcx - pw / 2, pcy + ph * 0.5, pw, ph),
-            face(.square, pcx - pw * 1.5, pcy - ph / 2, pw, ph),
-            ButtonSpec(input: .l2, frame: NormRect(x: 0.03, y: 0.45, w: 0.2, h: 0.04), shape: .pill, labelSize: 13),
-            ButtonSpec(input: .l, frame: NormRect(x: 0.03, y: 0.50, w: 0.2, h: 0.04), shape: .pill, label: "L1", labelSize: 13),
-            ButtonSpec(input: .r2, frame: NormRect(x: 0.77, y: 0.45, w: 0.2, h: 0.04), shape: .pill, labelSize: 13),
-            ButtonSpec(input: .r, frame: NormRect(x: 0.77, y: 0.50, w: 0.2, h: 0.04), shape: .pill, label: "R1", labelSize: 13),
-            ButtonSpec(input: .select, frame: NormRect(x: 0.28, y: 0.86, w: 0.20, h: 0.04), shape: .pill, labelSize: 11),
-            ButtonSpec(input: .start, frame: NormRect(x: 0.52, y: 0.86, w: 0.20, h: 0.04), shape: .pill, labelSize: 11),
-            ButtonSpec(input: .menu, frame: NormRect(x: 0.44, y: 0.93, w: 0.12, h: 0.04), shape: .pill, labelSize: 14),
-            ButtonSpec(input: .fastForward, frame: NormRect(x: 0.82, y: 0.93, w: 0.12, h: 0.04), shape: .pill, labelSize: 14),
-            ButtonSpec(input: .rewind, frame: NormRect(x: 0.06, y: 0.93, w: 0.12, h: 0.04), shape: .pill, labelSize: 14),
-        ])
-        let lw = 0.075, lh = lw * 2.17
-        let lcx = 0.905, lcy = 0.58
-        let landscape = ControllerLayout(screen: NormRect(x: 0.19, y: 0.03, w: 0.62, h: 0.86), buttons: [
-            ButtonSpec(input: .dpad, frame: NormRect(x: 0.02, y: 0.40, w: 0.17, h: 0.40), shape: .roundedRect),
-            face(.triangle, lcx - lw / 2, lcy - lh * 1.5, lw, lh),
-            face(.circle, lcx + lw * 0.5, lcy - lh / 2, lw, lh),
-            face(.cross, lcx - lw / 2, lcy + lh * 0.5, lw, lh),
-            face(.square, lcx - lw * 1.5, lcy - lh / 2, lw, lh),
-            ButtonSpec(input: .l2, frame: NormRect(x: 0.02, y: 0.03, w: 0.12, h: 0.10), shape: .pill, labelSize: 13),
-            ButtonSpec(input: .l, frame: NormRect(x: 0.02, y: 0.15, w: 0.12, h: 0.10), shape: .pill, label: "L1", labelSize: 13),
-            ButtonSpec(input: .r2, frame: NormRect(x: 0.86, y: 0.03, w: 0.12, h: 0.10), shape: .pill, labelSize: 13),
-            ButtonSpec(input: .r, frame: NormRect(x: 0.86, y: 0.15, w: 0.12, h: 0.10), shape: .pill, label: "R1", labelSize: 13),
-            ButtonSpec(input: .select, frame: NormRect(x: 0.03, y: 0.88, w: 0.11, h: 0.08), shape: .pill, labelSize: 10),
-            ButtonSpec(input: .start, frame: NormRect(x: 0.86, y: 0.88, w: 0.11, h: 0.08), shape: .pill, labelSize: 10),
-            ButtonSpec(input: .menu, frame: NormRect(x: 0.46, y: 0.90, w: 0.08, h: 0.08), shape: .pill, labelSize: 13),
-            ButtonSpec(input: .fastForward, frame: NormRect(x: 0.86, y: 0.27, w: 0.06, h: 0.09), shape: .pill, labelSize: 13),
-            ButtonSpec(input: .rewind, frame: NormRect(x: 0.08, y: 0.27, w: 0.06, h: 0.09), shape: .pill, labelSize: 13),
-        ])
-        return ControllerSkin(portrait: portrait, landscape: landscape)
+        paint(&skin.portrait, from: style.portrait)
+        paint(&skin.landscape, from: style.landscape)
+        skin.hapticsEnabled = style.hapticsEnabled
+        skin.soundsEnabled = style.soundsEnabled
+        skin.hideWhenControllerConnected = style.hideWhenControllerConnected
+        return skin
     }
 
     /// Restyles every button at once (used by built-in themes and the "apply to all" editor button).
