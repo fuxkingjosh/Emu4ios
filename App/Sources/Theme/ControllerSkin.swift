@@ -250,13 +250,13 @@ struct ControllerSkin: Codable, Hashable {
             return b
         }
         let pw = 0.15, ph = pw * 0.46 // circles on a ~9:19.5 phone
-        let pcx = 0.78, pcy = 0.70
+        let pcx = 0.73, pcy = 0.70
         let portrait = ControllerLayout(screen: NormRect(x: 0, y: 0.06, w: 1, h: 0.36), buttons: [
             ButtonSpec(input: .dpad, frame: NormRect(x: 0.04, y: 0.59, w: 0.40, h: 0.185), shape: .roundedRect),
             face(.triangle, pcx - pw / 2, pcy - ph * 1.5, pw, ph),
-            face(.circle, pcx + pw * 0.55, pcy - ph / 2, pw, ph),
+            face(.circle, pcx + pw * 0.5, pcy - ph / 2, pw, ph),
             face(.cross, pcx - pw / 2, pcy + ph * 0.5, pw, ph),
-            face(.square, pcx - pw * 1.55, pcy - ph / 2, pw, ph),
+            face(.square, pcx - pw * 1.5, pcy - ph / 2, pw, ph),
             ButtonSpec(input: .l2, frame: NormRect(x: 0.03, y: 0.45, w: 0.2, h: 0.04), shape: .pill, labelSize: 13),
             ButtonSpec(input: .l, frame: NormRect(x: 0.03, y: 0.50, w: 0.2, h: 0.04), shape: .pill, label: "L1", labelSize: 13),
             ButtonSpec(input: .r2, frame: NormRect(x: 0.77, y: 0.45, w: 0.2, h: 0.04), shape: .pill, labelSize: 13),
