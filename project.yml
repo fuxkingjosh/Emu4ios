@@ -36,7 +36,7 @@ targets:
         HEADER_SEARCH_PATHS: $(SRCROOT)/Vendor/mgba-include
         GCC_C_LANGUAGE_STANDARD: gnu11
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIcon-Neon AppIcon-Retro AppIcon-Candy AppIcon-Midnight"
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIcon-Neon AppIcon-Retro AppIcon-Candy AppIcon-Midnight AppIcon-Gold AppIcon-Ocean AppIcon-Lava AppIcon-Mint AppIcon-BigFour"
         ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: NO

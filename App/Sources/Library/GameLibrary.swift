@@ -6,9 +6,55 @@ final class GameLibrary: ObservableObject {
     @Published private(set) var games: [Game] = []
     @Published var lastImportMessage: String?
 
+    @Published private(set) var findingArt: Set<String> = []
+
     init() {
         load()
         scanForNewFiles()
+        autoFindArt()
+    }
+
+    // MARK: Cover art
+
+    private var artAttempted: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: "artAttempted") ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: "artAttempted") }
+    }
+
+    /// Looks up box art for any game that doesn't have it yet (once per game).
+    func autoFindArt() {
+        guard CoverArtService.isEnabled else { return }
+        for game in games where game.coverFileName == nil && !artAttempted.contains(game.id) {
+            findArt(for: game, manual: false)
+        }
+    }
+
+    /// Finds the official name and box art. `manual` = user tapped "Find Cover Art".
+    func findArt(for game: Game, manual: Bool) {
+        guard !findingArt.contains(game.id) else { return }
+        findingArt.insert(game.id)
+        artAttempted.insert(game.id)
+        let url = romURL(for: game)
+        Task {
+            let match = await CoverArtService.shared.lookup(romURL: url, system: game.system)
+            findingArt.remove(game.id)
+            guard var current = self.game(id: game.id) else { return }
+            if let match {
+                // Only replace the title if the user hasn't renamed the game.
+                if current.title == Self.prettyTitle(from: current.fileName) || manual {
+                    current.title = match.cleanTitle
+                    update(current)
+                }
+                if let image = match.image, current.coverFileName == nil || manual {
+                    setCover(image, for: current)
+                    if manual { lastImportMessage = "Found cover art for \(match.cleanTitle)" }
+                } else if manual {
+                    lastImportMessage = "Found \(match.cleanTitle), but no box art for it yet"
+                }
+            } else if manual {
+                lastImportMessage = "Couldn't identify this game"
+            }
+        }
     }
 
     var recentlyPlayed: [Game] {
@@ -54,6 +100,7 @@ final class GameLibrary: ObservableObject {
             }
         }
         save()
+        autoFindArt()
         if !skipped.isEmpty {
             lastImportMessage = "Couldn't import: " + skipped.joined(separator: ", ")
         } else if added > 0 {
@@ -78,6 +125,7 @@ final class GameLibrary: ObservableObject {
         let before = games.count
         games.removeAll { !present.contains($0.fileName) }
         if changed || games.count != before { save() }
+        if changed { autoFindArt() }
     }
 
     private func add(fileName: String, system: GameSystem) {

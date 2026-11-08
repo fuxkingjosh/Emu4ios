@@ -95,6 +95,11 @@ struct ThemeColor: Codable, Hashable {
         return "#" + s
     }
 
+    func darkened(_ amount: Double) -> ThemeColor {
+        let c = components
+        return ThemeColor(c.r * (1 - amount), c.g * (1 - amount), c.b * (1 - amount), c.a)
+    }
+
     static let white = ThemeColor(hex: "#FFFFFF")
     static let black = ThemeColor(hex: "#000000")
     static let clear = ThemeColor(hex: "#00000000")
@@ -177,7 +182,7 @@ enum BackgroundKind: String, Codable, CaseIterable, Identifiable {
         case .synthGrid: return "Synth Grid"
         case .starfield: return "Starfield"
         case .bubbles: return "Bubbles"
-        case .image: return "Photo"
+        case .image: return "Photo / GIF"
         }
     }
     var isAnimated: Bool { ![.solid, .gradient, .image].contains(self) }

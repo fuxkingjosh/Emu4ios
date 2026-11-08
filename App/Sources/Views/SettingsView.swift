@@ -4,9 +4,10 @@ struct SettingsView: View {
     @EnvironmentObject var themes: ThemeStore
     @EnvironmentObject var gestures: GestureSettings
     @AppStorage("autoResume") private var autoResume = true
+    @AppStorage("autoCoverArt") private var autoCoverArt = true
     @AppStorage("rewindEnabled") private var rewindEnabled = true
     @AppStorage("respectSilentSwitch") private var respectSilentSwitch = true
-    @AppStorage("clipsEnabled") private var clipsEnabled = false
+    @AppStorage("clipsEnabled") private var clipsEnabled = true
     @AppStorage("clipLength") private var clipLength = 30.0
     @AppStorage("cloudSyncEnabled") private var cloudSyncEnabled = true
     @State private var cloudAvailable = CloudSync.shared.isAvailable
@@ -14,6 +15,14 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    Toggle("Find Cover Art Automatically", isOn: $autoCoverArt)
+                } header: {
+                    Text("Library")
+                } footer: {
+                    Text("Identifies your games and downloads their box art and official names from the free libretro game database. Needs an internet connection the first time.")
+                }
+
                 Section("Playing") {
                     Toggle("Resume Where You Left Off", isOn: $autoResume)
                     Toggle("Rewind", isOn: $rewindEnabled)
@@ -47,7 +56,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Clips")
                 } footer: {
-                    Text("Keeps the last moments of gameplay ready so you can save a clip to Photos from the menu, a gesture, or a controller button.")
+                    Text("Records the game screen and sound in the background so you can save the last moments to Photos from the menu, a gesture, or a Clip button on your controller.")
                 }
 
                 Section {
@@ -66,8 +75,15 @@ struct SettingsView: View {
                     Text("Syncs saves, save states and themes between your devices.")
                 }
 
-                Section("App Icon") {
+                Section {
                     AppIconPicker()
+                    NavigationLink {
+                        IconStudioView()
+                    } label: {
+                        Label("Design Your Own Icon", systemImage: "paintpalette")
+                    }
+                } header: {
+                    Text("App Icon")
                 }
 
                 Section {
@@ -111,6 +127,11 @@ struct AppIconPicker: View {
         IconOption(name: "AppIcon-Retro", title: "Pea Soup", preview: "IconPreview-Retro"),
         IconOption(name: "AppIcon-Candy", title: "Candy", preview: "IconPreview-Candy"),
         IconOption(name: "AppIcon-Midnight", title: "Midnight", preview: "IconPreview-Midnight"),
+        IconOption(name: "AppIcon-Gold", title: "Gold", preview: "IconPreview-Gold"),
+        IconOption(name: "AppIcon-Ocean", title: "Ocean", preview: "IconPreview-Ocean"),
+        IconOption(name: "AppIcon-Lava", title: "Lava", preview: "IconPreview-Lava"),
+        IconOption(name: "AppIcon-Mint", title: "Mint", preview: "IconPreview-Mint"),
+        IconOption(name: "AppIcon-BigFour", title: "Big 4", preview: "IconPreview-BigFour"),
     ]
 
     var body: some View {

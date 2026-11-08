@@ -247,6 +247,11 @@ struct GameArtwork: View {
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+        .overlay {
+            if library.findingArt.contains(game.id) {
+                ProgressView().tint(.white).padding(8).background(.black.opacity(0.35), in: Circle())
+            }
+        }
     }
 
     private var initials: String {
@@ -291,12 +296,25 @@ struct GameDetailSheet: View {
                             GameArtwork(game: game, size: 140)
                             Spacer()
                         }
+                        Button {
+                            library.findArt(for: game, manual: true)
+                        } label: {
+                            if library.findingArt.contains(game.id) {
+                                HStack { ProgressView(); Text("Looking up game…") }
+                            } else {
+                                Label("Find Cover Art & Name Automatically", systemImage: "sparkle.magnifyingglass")
+                            }
+                        }
+                        .disabled(library.findingArt.contains(game.id))
                         PhotosPicker(selection: $coverItem, matching: .images) {
-                            Label("Choose Cover Art", systemImage: "photo")
+                            Label("Choose My Own Cover Art", systemImage: "photo")
                         }
                         if game.coverFileName != nil {
                             Button("Remove Cover Art", role: .destructive) { library.removeCover(for: game) }
                         }
+                    }
+                    if let message = library.lastImportMessage {
+                        Section { Text(message).foregroundStyle(.secondary) }
                     }
                     Section("Title") {
                         TextField("Title", text: Binding(

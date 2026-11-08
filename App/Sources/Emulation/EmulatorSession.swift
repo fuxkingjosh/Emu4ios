@@ -40,9 +40,10 @@ final class EmulatorSession: ObservableObject {
         if resumeAutoSave, let auto = saveStates.first(where: { $0.isAuto }) {
             _ = core.loadState(from: auto.url)
         }
+        let size = core.videoSize
+        ClipRecorder.shared.begin(width: size.width, height: size.height, fps: core.fps, sampleRate: core.sampleRate)
         loop.start()
         loop.paused = false
-        ClipRecorder.shared.startBuffering()
     }
 
     /// Stops the game, writes the auto-save, and returns seconds played.
@@ -53,7 +54,7 @@ final class EmulatorSession: ObservableObject {
         let seconds = loop.activePlaySeconds
         loop.stop()
         CloudSync.shared.didChangeFile(AppPaths.saveFile(for: game), kind: .save)
-        ClipRecorder.shared.stopBuffering()
+        ClipRecorder.shared.end()
         return (seconds, image)
     }
 
@@ -234,6 +235,7 @@ final class EmulatorSession: ObservableObject {
     }
 
     func saveClip() {
+        showToast("Saving clip…")
         ClipRecorder.shared.exportLastClip { [weak self] message in
             Task { @MainActor in self?.showToast(message) }
         }

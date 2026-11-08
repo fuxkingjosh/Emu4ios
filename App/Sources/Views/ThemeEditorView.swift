@@ -157,7 +157,7 @@ struct ThemeEditorView: View {
                 }
             }
             if draft!.background.kind == .image {
-                PhotosPicker(selection: $backgroundItem, matching: .images) { Label("Choose Photo", systemImage: "photo") }
+                PhotosPicker(selection: $backgroundItem, matching: .any(of: [.images, .livePhotos])) { Label("Choose Photo or GIF", systemImage: "photo") }
                 VStack(alignment: .leading) {
                     Text("Darken")
                     Slider(value: binding(\.background.imageDim), in: 0...0.8)
@@ -167,8 +167,10 @@ struct ThemeEditorView: View {
         }
         .onChange(of: backgroundItem) { _, item in
             Task {
-                guard let data = try? await item?.loadTransferable(type: Data.self), let image = UIImage(data: data) else { return }
-                draft?.background.imageData = image.resizedForTheme().jpegData(compressionQuality: 0.7)
+                guard let data = try? await item?.loadTransferable(type: Data.self), UIImage(data: data) != nil else { return }
+                draft?.background.imageData = AnimatedImage.isAnimated(data)
+                    ? data
+                    : (UIImage(data: data)?.resizedForTheme().jpegData(compressionQuality: 0.75) ?? data)
                 draft?.background.kind = .image
             }
         }

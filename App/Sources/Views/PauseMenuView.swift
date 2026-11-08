@@ -91,6 +91,18 @@ struct PauseMenuView: View {
             .confirmationDialog("Restart the game? Unsaved progress will be lost.", isPresented: $confirmRestart, titleVisibility: .visible) {
                 Button(theme.label(.restart), role: .destructive) { session.restart() }
             }
+            .overlay(alignment: .bottom) {
+                // Messages (clip saved, screenshot, etc.) need to show here too, since the menu covers the game.
+                if let toast = session.toast {
+                    Text(toast)
+                        .font(style.font(.subheadline, weight: .semibold))
+                        .padding(.horizontal, 16).padding(.vertical, 10)
+                        .background(.regularMaterial, in: Capsule())
+                        .padding(.bottom, 24)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.spring(duration: 0.3), value: session.toast)
         }
         .tint(style.accent.color)
     }

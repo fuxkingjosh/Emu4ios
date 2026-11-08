@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import AudioToolbox
+import AVFoundation
 
 /// Callbacks from the controller to whoever is listening (the play session, or nothing in the editor).
 struct ControllerActions {
@@ -39,11 +40,35 @@ final class ControllerTouchView: UIView {
 
     private var generators: [HapticStrength: UIImpactFeedbackGenerator] = [:]
 
+    // Layers: pictures behind buttons → drawn buttons → picture buttons → pictures above buttons.
+    private let deckCanvas = ButtonCanvasView()
+    private let behindLayer = UIView()
+    private let canvas = ButtonCanvasView()
+    private let frontLayer = UIView()
+    private var buttonImageViews: [String: UIImageView] = [:]
+    private var decorationViews: [String: UIImageView] = [:]
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         isMultipleTouchEnabled = true
         backgroundColor = .clear
-        contentMode = .redraw
+        for layerView in [deckCanvas, behindLayer, canvas, frontLayer] {
+            layerView.isUserInteractionEnabled = false
+            layerView.backgroundColor = .clear
+            addSubview(layerView)
+        }
+        canvas.contentMode = .redraw
+        canvas.drawHandler = { [weak self] _ in self?.drawButtons() }
+        deckCanvas.contentMode = .redraw
+        deckCanvas.drawHandler = { [weak self] _ in self?.drawDeck() }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        for layerView in [deckCanvas, behindLayer, canvas, frontLayer] { layerView.frame = bounds }
+        deckCanvas.setNeedsDisplay()
+        syncImageViews()
+        canvas.setNeedsDisplay()
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -52,7 +77,84 @@ final class ControllerTouchView: UIView {
         guard layout != self.layout || skin != self.skin else { return }
         self.layout = layout
         self.skin = skin
-        setNeedsDisplay()
+        syncImageViews()
+        deckCanvas.setNeedsDisplay()
+        refresh()
+    }
+
+    private func refresh() {
+        canvas.setNeedsDisplay()
+        for spec in layout.buttons where spec.hasImage {
+            guard let view = buttonImageViews[spec.id] else { continue }
+            let isPressed = pressed[spec.id] != nil
+            if let pressedData = spec.pressedImageData {
+                let data = isPressed ? pressedData : spec.imageData!
+                if view.accessibilityIdentifier != (isPressed ? "p" : "n") {
+                    view.image = AnimatedImage.image(from: data)
+                    view.accessibilityIdentifier = isPressed ? "p" : "n"
+                    view.startAnimating()
+                }
+                view.alpha = spec.opacity
+            } else {
+                view.alpha = spec.opacity * (isPressed ? 0.55 : 1)
+                view.transform = isPressed ? CGAffineTransform(scaleX: 0.94, y: 0.94) : .identity
+            }
+        }
+    }
+
+    /// Creates/updates image views for picture buttons and decorations.
+    private func syncImageViews() {
+        let size = bounds.size
+        var seenButtons = Set<String>()
+        for spec in layout.buttons where spec.hasImage && !spec.hidden {
+            seenButtons.insert(spec.id)
+            let view = buttonImageViews[spec.id] ?? {
+                let v = UIImageView()
+                v.contentMode = .scaleAspectFit
+                frontLayer.insertSubview(v, at: 0)
+                buttonImageViews[spec.id] = v
+                return v
+            }()
+            if view.accessibilityValue != "\(spec.imageData!.hashValue)" {
+                view.image = AnimatedImage.image(from: spec.imageData!)
+                view.accessibilityValue = "\(spec.imageData!.hashValue)"
+                view.accessibilityIdentifier = "n"
+                view.startAnimating()
+            }
+            view.transform = .identity
+            view.frame = spec.frame.rect(in: size)
+            view.alpha = spec.opacity
+        }
+        for (id, view) in buttonImageViews where !seenButtons.contains(id) {
+            view.removeFromSuperview()
+            buttonImageViews[id] = nil
+        }
+
+        var seenDecorations = Set<String>()
+        for deco in layout.decorations {
+            seenDecorations.insert(deco.id)
+            let view = decorationViews[deco.id] ?? {
+                let v = UIImageView()
+                v.contentMode = .scaleAspectFit
+                v.clipsToBounds = true
+                decorationViews[deco.id] = v
+                return v
+            }()
+            let parent = deco.aboveButtons ? frontLayer : behindLayer
+            if view.superview !== parent { view.removeFromSuperview(); parent.addSubview(view) }
+            if view.accessibilityValue != "\(deco.imageData.hashValue)" {
+                view.image = AnimatedImage.image(from: deco.imageData)
+                view.accessibilityValue = "\(deco.imageData.hashValue)"
+                view.startAnimating()
+            }
+            view.frame = deco.frame.rect(in: size)
+            view.alpha = deco.opacity
+            view.layer.cornerRadius = deco.cornerRadius
+        }
+        for (id, view) in decorationViews where !seenDecorations.contains(id) {
+            view.removeFromSuperview()
+            decorationViews[id] = nil
+        }
     }
 
     // MARK: Hit testing
@@ -137,7 +239,7 @@ final class ControllerTouchView: UIView {
                 dpadMasks[key] = mask
                 pressed[current.id] = mask
                 actions.direction(touchID, mask)
-                setNeedsDisplay()
+                refresh()
             }
             return
         }
@@ -151,9 +253,9 @@ final class ControllerTouchView: UIView {
             pressed[current.id] = nil
             touchButtons[key] = nil
         }
-        guard let target else { setNeedsDisplay(); return }
+        guard let target else { refresh(); return }
         // Only game buttons can be slid onto; app actions need a fresh tap.
-        if !began && target.input.isAction { setNeedsDisplay(); return }
+        if !began && target.input.isAction { refresh(); return }
 
         touchButtons[key] = target.id
         if target.input == .dpad {
@@ -166,7 +268,7 @@ final class ControllerTouchView: UIView {
             actions.press(target.input, touchID, nil, target.turbo)
         }
         feedback(target)
-        setNeedsDisplay()
+        refresh()
     }
 
     private func end(_ touch: UITouch) {
@@ -176,7 +278,7 @@ final class ControllerTouchView: UIView {
         touchButtons[key] = nil
         dpadMasks[key] = nil
         pressed[id] = nil
-        setNeedsDisplay()
+        refresh()
     }
 
     // MARK: Feedback
@@ -206,7 +308,7 @@ final class ControllerTouchView: UIView {
 
     // MARK: Drawing
 
-    override func draw(_ rect: CGRect) {
+    private func drawDeck() {
         guard let ctx = UIGraphicsGetCurrentContext() else { return }
         if layout.deckColor.components.a > 0 {
             let screenBottom = layout.screen.rect(in: bounds.size)
@@ -214,13 +316,28 @@ final class ControllerTouchView: UIView {
             if bounds.width < bounds.height {
                 ctx.fill(CGRect(x: 0, y: screenBottom.maxY, width: bounds.width, height: bounds.height - screenBottom.maxY))
             } else {
-                ctx.fill(bounds)
+                // Everything except the game screen.
+                let path = UIBezierPath(rect: bounds)
+                path.append(UIBezierPath(rect: screenBottom))
+                path.usesEvenOddFillRule = true
+                ctx.addPath(path.cgPath)
+                ctx.fillPath(using: .evenOdd)
             }
         }
-        for spec in layout.buttons where !spec.hidden {
+    }
+
+    private func drawButtons() {
+        guard let ctx = UIGraphicsGetCurrentContext() else { return }
+        for spec in layout.buttons where !spec.hidden && !spec.hasImage {
             ButtonRenderer.draw(spec, in: frame(of: spec), pressedMask: pressed[spec.id], context: ctx)
         }
     }
+}
+
+/// Plain view whose drawing is supplied by the controller.
+final class ButtonCanvasView: UIView {
+    var drawHandler: ((CGRect) -> Void)?
+    override func draw(_ rect: CGRect) { drawHandler?(rect) }
 }
 
 enum ButtonSoundPlayer {
@@ -270,6 +387,15 @@ enum ButtonRenderer {
         spec.borderWidth *= scale
         ctx.saveGState()
         ctx.setAlpha(spec.opacity)
+        if let data = (pressedMask != nil ? spec.pressedImageData : nil) ?? spec.imageData,
+           let image = AnimatedImage.image(from: data) {
+            // Picture buttons (previews/editor); the live controller animates them with image views.
+            let still = image.images?.first ?? image
+            let fit = AVMakeRectWithAspectRatioInsideRect(still.size, r)
+            still.draw(in: fit)
+            ctx.restoreGState()
+            return
+        }
         if spec.input == .dpad {
             drawDPad(spec, in: r, mask: pressedMask ?? 0, context: ctx)
         } else {

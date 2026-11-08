@@ -109,8 +109,24 @@ struct ButtonSpec: Codable, Hashable, Identifiable {
     var dpadStyle: DPadStyle = .cross
     /// Lets diagonal presses register on the D-pad.
     var dpadDiagonals: Bool = true
+    /// Custom picture for the button (PNG, JPEG or animated GIF). Replaces the drawn shape.
+    var imageData: Data? = nil
+    /// Optional picture while pressed (otherwise the normal picture dims).
+    var pressedImageData: Data? = nil
 
     var displayLabel: String { label ?? input.defaultLabel }
+    var hasImage: Bool { imageData != nil }
+}
+
+/// A picture or animated GIF placed anywhere on the controller screen.
+struct Decoration: Codable, Hashable, Identifiable {
+    var id: String = UUID().uuidString
+    var imageData: Data
+    var frame: NormRect
+    var opacity: Double = 1
+    /// Draw on top of the buttons (touches still pass through to the buttons).
+    var aboveButtons: Bool = false
+    var cornerRadius: Double = 0
 }
 
 struct ControllerLayout: Codable, Hashable {
@@ -119,6 +135,8 @@ struct ControllerLayout: Codable, Hashable {
     var buttons: [ButtonSpec]
     /// Color of the controller area (behind the buttons). Clear = show the background.
     var deckColor = ThemeColor.clear
+    /// Stickers, GIFs and pictures placed on the controller.
+    var decorations: [Decoration] = []
 }
 
 struct ControllerSkin: Codable, Hashable {

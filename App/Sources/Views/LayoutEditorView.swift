@@ -1,4 +1,6 @@
 import SwiftUI
+import PhotosUI
+import UniformTypeIdentifiers
 
 /// Drag buttons to move them, drag the corner handle to resize, tap to restyle.
 struct LayoutEditorView: View {
@@ -17,6 +19,9 @@ struct LayoutEditorView: View {
     @State private var showControllerSettings = false
     @State private var dragOrigin: NormRect?
     @State private var snap = true
+    @State private var showPhotoPicker = false
+    @State private var showFilePicker = false
+    @State private var pickedPhoto: PhotosPickerItem?
 
     private static let screenID = "__screen__"
 
@@ -37,6 +42,7 @@ struct LayoutEditorView: View {
     }
 
     private var selectedIndex: Int? { layout.buttons.firstIndex { $0.id == selectedID } }
+    private var selectedDecorationIndex: Int? { layout.decorations.firstIndex { $0.id == selectedID } }
 
     var body: some View {
         NavigationStack {
@@ -57,8 +63,29 @@ struct LayoutEditorView: View {
             .navigationTitle("\(system.shortName) Controller")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbar }
+            .photosPicker(isPresented: $showPhotoPicker, selection: $pickedPhoto, matching: .images)
+            .fileImporter(isPresented: $showFilePicker, allowedContentTypes: AnimatedImage.pickableTypes) { result in
+                guard case .success(let url) = result else { return }
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                if let data = try? Data(contentsOf: url) { addDecoration(data) }
+            }
+            .onChange(of: pickedPhoto) { _, item in
+                guard let item else { return }
+                Task {
+                    if let data = try? await item.loadTransferable(type: Data.self) { addDecoration(data) }
+                    pickedPhoto = nil
+                }
+            }
             .sheet(isPresented: $showInspector) {
-                if let i = selectedIndex {
+                if let d = selectedDecorationIndex {
+                    DecorationInspector(decoration: Binding(
+                        get: { layout.decorations.indices.contains(d) ? layout.decorations[d] : Decoration(imageData: Data(), frame: NormRect(x: 0, y: 0, w: 0.1, h: 0.1)) },
+                        set: { value in updateLayout { if $0.decorations.indices.contains(d) { $0.decorations[d] = value } } }),
+                        delete: { deleteSelected() },
+                        moveLayer: { forward in moveDecoration(forward: forward) })
+                    .presentationDetents([.medium])
+                } else if let i = selectedIndex {
                     ButtonInspector(spec: Binding(
                         get: { layout.buttons.indices.contains(i) ? layout.buttons[i] : layout.buttons[0] },
                         set: { value in updateLayout { if $0.buttons.indices.contains(i) { $0.buttons[i] = value } } }),
@@ -93,8 +120,14 @@ struct LayoutEditorView: View {
                 layout.deckColor.color
             }
             screenPlaceholder(size: size)
+            ForEach(layout.decorations.filter { !$0.aboveButtons }) { deco in
+                decorationHandle(deco, size: size)
+            }
             ForEach(layout.buttons) { spec in
                 buttonHandle(spec, size: size)
+            }
+            ForEach(layout.decorations.filter(\.aboveButtons)) { deco in
+                decorationHandle(deco, size: size)
             }
         }
         .contentShape(Rectangle())
@@ -148,6 +181,25 @@ struct LayoutEditorView: View {
         .onTapGesture { selectedID = spec.id }
     }
 
+    private func decorationHandle(_ deco: Decoration, size: CGSize) -> some View {
+        let rect = deco.frame.rect(in: size)
+        let selected = selectedID == deco.id
+        return AnimatedImageView(data: deco.imageData)
+            .frame(width: rect.width, height: rect.height)
+            .clipShape(RoundedRectangle(cornerRadius: deco.cornerRadius))
+            .opacity(deco.opacity)
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(selected ? Color.cyan : Color.clear, style: StrokeStyle(lineWidth: 2, dash: [5, 3]))
+            )
+            .overlay(alignment: .bottomTrailing) { if selected { resizeHandle(id: deco.id, size: size) } }
+            .contentShape(Rectangle())
+            .offset(x: rect.minX, y: rect.minY)
+            .gesture(moveGesture(id: deco.id, size: size))
+            .onTapGesture(count: 2) { selectedID = deco.id; showInspector = true }
+            .onTapGesture { selectedID = deco.id }
+    }
+
     private func resizeHandle(id: String, size: CGSize) -> some View {
         Circle()
             .fill(Color.yellow)
@@ -160,13 +212,15 @@ struct LayoutEditorView: View {
     // MARK: Gestures
 
     private func frame(for id: String) -> NormRect? {
-        id == Self.screenID ? layout.screen : layout.buttons.first { $0.id == id }?.frame
+        if id == Self.screenID { return layout.screen }
+        return layout.buttons.first { $0.id == id }?.frame ?? layout.decorations.first { $0.id == id }?.frame
     }
 
     private func setFrame(_ rect: NormRect, for id: String) {
         updateLayout { l in
             if id == Self.screenID { l.screen = rect }
             else if let i = l.buttons.firstIndex(where: { $0.id == id }) { l.buttons[i].frame = rect }
+            else if let i = l.decorations.firstIndex(where: { $0.id == id }) { l.decorations[i].frame = rect }
         }
     }
 
@@ -193,6 +247,12 @@ struct LayoutEditorView: View {
                 var r = origin
                 r.w = snapped(max(0.04, origin.w + value.translation.width / size.width))
                 r.h = snapped(max(0.02, origin.h + value.translation.height / size.height))
+                // Pictures keep their shape.
+                if let deco = layout.decorations.first(where: { $0.id == id }),
+                   let img = AnimatedImage.image(from: deco.imageData), img.size.width > 0 {
+                    let aspect = img.size.height / img.size.width
+                    r.h = r.w * size.width * aspect / size.height
+                }
                 // Keep round buttons round unless the user has made them wide on purpose.
                 if let spec = layout.buttons.first(where: { $0.id == id }), spec.shape == .circle || spec.input == .dpad {
                     let side = max(r.w * size.width, r.h * size.height)
@@ -219,6 +279,10 @@ struct LayoutEditorView: View {
             .frame(width: 110)
             Spacer()
             Menu {
+                Section("Pictures & GIFs") {
+                    Button { showPhotoPicker = true } label: { Label("From Photos", systemImage: "photo.on.rectangle") }
+                    Button { showFilePicker = true } label: { Label("From Files (GIF, PNG…)", systemImage: "folder") }
+                }
                 ForEach(ControlInput.allCases.filter { $0.isAction }) { input in
                     Button(input.displayName) { addButton(input) }
                 }
@@ -229,7 +293,7 @@ struct LayoutEditorView: View {
                 }
             } label: { Image(systemName: "plus.circle") }
             Button { showInspector = true } label: { Image(systemName: "paintbrush") }
-                .disabled(selectedIndex == nil)
+                .disabled(selectedIndex == nil && selectedDecorationIndex == nil)
             Toggle(isOn: $snap) { Image(systemName: "grid") }.toggleStyle(.button)
             Button { showControllerSettings = true } label: { Image(systemName: "slider.horizontal.3") }
         }
@@ -251,8 +315,36 @@ struct LayoutEditorView: View {
         selectedID = spec.id
     }
 
+    private func addDecoration(_ raw: Data) {
+        guard let image = AnimatedImage.image(from: raw) else { return }
+        let data = AnimatedImage.prepareForTheme(raw)
+        let width = landscape ? 0.18 : 0.3
+        let aspect = image.size.height / max(image.size.width, 1)
+        let canvasAspect = landscape ? 0.46 : 2.17 // height / width of the phone in this orientation
+        let height = width * aspect / canvasAspect
+        let deco = Decoration(imageData: data,
+                              frame: NormRect(x: 0.5 - width / 2, y: landscape ? 0.4 : 0.62, w: width, h: height))
+        updateLayout { $0.decorations.append(deco) }
+        selectedID = deco.id
+    }
+
+    private func moveDecoration(forward: Bool) {
+        guard let id = selectedID else { return }
+        updateLayout { l in
+            guard let i = l.decorations.firstIndex(where: { $0.id == id }) else { return }
+            let target = forward ? min(i + 1, l.decorations.count - 1) : max(i - 1, 0)
+            l.decorations.swapAt(i, target)
+        }
+    }
+
     private func deleteSelected() {
         guard let id = selectedID else { return }
+        if layout.decorations.contains(where: { $0.id == id }) {
+            updateLayout { $0.decorations.removeAll { $0.id == id } }
+            showInspector = false
+            selectedID = nil
+            return
+        }
         updateLayout { l in
             guard let i = l.buttons.firstIndex(where: { $0.id == id }) else { return }
             // Game buttons are hidden instead of deleted so the system always has every input.
@@ -303,6 +395,8 @@ struct ButtonInspector: View {
     let applyToAll: (ButtonSpec) -> Void
     let delete: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var normalPhoto: PhotosPickerItem?
+    @State private var pressedPhoto: PhotosPickerItem?
 
     var body: some View {
         NavigationStack {
@@ -354,6 +448,25 @@ struct ButtonInspector: View {
                         Slider(value: $spec.opacity, in: 0.05...1)
                     }
                 }
+                Section {
+                    PhotosPicker(selection: $normalPhoto, matching: .images) {
+                        Label(spec.imageData == nil ? "Use a Picture or GIF" : "Change Picture", systemImage: "photo")
+                    }
+                    if spec.imageData != nil {
+                        PhotosPicker(selection: $pressedPhoto, matching: .images) {
+                            Label(spec.pressedImageData == nil ? "Picture While Pressed (optional)" : "Change Pressed Picture",
+                                  systemImage: "hand.tap")
+                        }
+                        Button("Remove Pictures", role: .destructive) {
+                            spec.imageData = nil
+                            spec.pressedImageData = nil
+                        }
+                    }
+                } header: {
+                    Text("Picture")
+                } footer: {
+                    Text("Turn this button into any picture or animated GIF.")
+                }
                 Section("Feel") {
                     Picker("Vibration", selection: $spec.haptic) {
                         ForEach(HapticStrength.allCases) { Text($0.rawValue.capitalized).tag($0) }
@@ -374,6 +487,20 @@ struct ButtonInspector: View {
             .navigationTitle(spec.input.displayName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .onChange(of: normalPhoto) { _, item in
+                Task {
+                    if let data = try? await item?.loadTransferable(type: Data.self), AnimatedImage.image(from: data) != nil {
+                        spec.imageData = AnimatedImage.prepareForTheme(data, maxSide: 400)
+                    }
+                }
+            }
+            .onChange(of: pressedPhoto) { _, item in
+                Task {
+                    if let data = try? await item?.loadTransferable(type: Data.self), AnimatedImage.image(from: data) != nil {
+                        spec.pressedImageData = AnimatedImage.prepareForTheme(data, maxSide: 400)
+                    }
+                }
+            }
         }
     }
 
@@ -408,6 +535,60 @@ struct ControllerSettingsSheet: View {
             .navigationTitle("Controller Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+    }
+}
+
+struct DecorationInspector: View {
+    @Binding var decoration: Decoration
+    let delete: () -> Void
+    let moveLayer: (Bool) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var replacement: PhotosPickerItem?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    HStack {
+                        Spacer()
+                        AnimatedImageView(data: decoration.imageData).frame(width: 140, height: 100)
+                        Spacer()
+                    }
+                    .listRowBackground(Color.black.opacity(0.6))
+                }
+                Section("Picture") {
+                    VStack(alignment: .leading) {
+                        Text("Opacity \(Int(decoration.opacity * 100))%")
+                        Slider(value: $decoration.opacity, in: 0.05...1)
+                    }
+                    VStack(alignment: .leading) {
+                        Text("Rounded Corners \(Int(decoration.cornerRadius))")
+                        Slider(value: $decoration.cornerRadius, in: 0...60, step: 1)
+                    }
+                    Toggle("Show Above Buttons", isOn: $decoration.aboveButtons)
+                    HStack {
+                        Button("Send Backward") { moveLayer(false) }
+                        Spacer()
+                        Button("Bring Forward") { moveLayer(true) }
+                    }
+                    .buttonStyle(.borderless)
+                    PhotosPicker(selection: $replacement, matching: .images) { Label("Replace Picture", systemImage: "photo") }
+                }
+                Section {
+                    Button("Delete Picture", role: .destructive) { delete() }
+                }
+            }
+            .navigationTitle("Picture")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .onChange(of: replacement) { _, item in
+                Task {
+                    if let data = try? await item?.loadTransferable(type: Data.self), AnimatedImage.image(from: data) != nil {
+                        decoration.imageData = AnimatedImage.prepareForTheme(data)
+                    }
+                }
+            }
         }
     }
 }

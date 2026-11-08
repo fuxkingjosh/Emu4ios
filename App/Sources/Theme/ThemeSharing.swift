@@ -13,7 +13,7 @@ enum ThemeSharingError: LocalizedError {
         switch self {
         case .invalidData: return "That doesn't look like an Emu4ios theme."
         case .newerVersion: return "This theme was made with a newer version of Emu4ios. Update the app to use it."
-        case .tooLargeForLink: return "This theme has a photo background, so it's too big for a link or QR code. Share it as a file instead."
+        case .tooLargeForLink: return "This theme has pictures or GIFs, so it's too big for a link or QR code. Share it as a file instead."
         }
     }
 }
@@ -46,7 +46,7 @@ enum ThemeSharing {
     static func link(for theme: Theme) throws -> URL {
         var shareable = theme
         shareable.isBuiltIn = false
-        if shareable.background.imageData != nil { throw ThemeSharingError.tooLargeForLink }
+        if shareable.hasPictures { throw ThemeSharingError.tooLargeForLink }
         let json = try encode(shareable)
         let packed = try compress(json)
         let string = linkPrefix + packed.base64URLEncoded()
@@ -143,6 +143,19 @@ struct ThemeFile: Transferable {
     static var transferRepresentation: some TransferRepresentation {
         FileRepresentation(exportedContentType: .e4theme) { file in
             SentTransferredFile(try ThemeSharing.exportFile(for: file.theme))
+        }
+    }
+}
+
+extension Theme {
+    /// Photos/GIFs make a theme too big for links and QR codes (files still work).
+    var hasPictures: Bool {
+        if background.imageData != nil { return true }
+        let skins = Array(controllers.values) + [defaultController]
+        return skins.contains { skin in
+            [skin.portrait, skin.landscape].contains { layout in
+                !layout.decorations.isEmpty || layout.buttons.contains { $0.imageData != nil || $0.pressedImageData != nil }
+            }
         }
     }
 }

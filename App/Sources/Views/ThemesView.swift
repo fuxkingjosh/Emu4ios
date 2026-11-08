@@ -129,7 +129,7 @@ struct ShareThemeSheet: View {
                         Text("This theme is too detailed for a QR code. Share the link or file instead.")
                             .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
                     } else {
-                        Text("This theme has a photo background, so it can only be shared as a file.")
+                        Text("This theme has pictures or GIFs, so it can only be shared as a file.")
                             .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
                     }
 

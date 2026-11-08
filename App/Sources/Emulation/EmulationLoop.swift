@@ -201,12 +201,20 @@ final class EmulationLoop: @unchecked Sendable {
                         core.readAudio(into: $0.baseAddress!, maxFrames: 4_096)
                     }
                     if speed <= 1.01, produced > 0 {
-                        audioScratch.withUnsafeBufferPointer { audio.ring.write($0.baseAddress!, frames: produced) }
+                        audioScratch.withUnsafeBufferPointer {
+                            audio.ring.write($0.baseAddress!, frames: produced)
+                            ClipRecorder.shared.appendAudio(samples: $0.baseAddress!, frames: produced)
+                        }
                     }
                     if rewindOn {
                         lock.withLock { rewind.tick { core.saveState() } }
                     }
-                    if i == framesThisTick - 1 { publishFrame() }
+                    if i == framesThisTick - 1 {
+                        publishFrame()
+                        if speed <= 1.01 {
+                            frame.read { pixels, w, h, _ in ClipRecorder.shared.appendVideo(pixels: pixels, width: w, height: h) }
+                        }
+                    }
                 }
                 // Fractional speeds (e.g. 1.5x, 0.5x) adjust the frame time.
                 let effective = speed < 1 ? speed : speed / Double(framesThisTick)

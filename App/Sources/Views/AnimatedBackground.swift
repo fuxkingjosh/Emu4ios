@@ -13,9 +13,13 @@ struct ThemeBackground: View {
             case .gradient:
                 LinearGradient(colors: style.colors.map(\.color), startPoint: .topLeading, endPoint: .bottomTrailing)
             case .image:
-                if let data = style.imageData, let image = UIImage(data: data) {
-                    Image(uiImage: image).resizable().scaledToFill()
-                        .overlay(Color.black.opacity(style.imageDim))
+                if let data = style.imageData {
+                    GeometryReader { geo in
+                        AnimatedImageView(data: data, contentMode: .scaleAspectFill)
+                            .frame(width: geo.size.width, height: geo.size.height)
+                            .clipped()
+                    }
+                    .overlay(Color.black.opacity(style.imageDim))
                 } else {
                     (style.colors.first ?? .black).color
                 }
@@ -147,6 +151,9 @@ struct ThemePreviewCard: View {
                     .overlay(Text(system.shortName).font(.caption.bold()).foregroundStyle(.white.opacity(0.7)))
                     .frame(width: screenRect.width * 0.86, height: screenRect.height * 0.86)
                     .position(x: screenRect.midX, y: screenRect.midY)
+                ForEach(layout.decorations.filter { !$0.aboveButtons }) { deco in
+                    decorationView(deco, in: geo.size)
+                }
                 Canvas { ctx, size in
                     ctx.withCGContext { cg in
                         UIGraphicsPushContext(cg)
@@ -157,9 +164,21 @@ struct ThemePreviewCard: View {
                         UIGraphicsPopContext()
                     }
                 }
+                ForEach(layout.decorations.filter(\.aboveButtons)) { deco in
+                    decorationView(deco, in: geo.size)
+                }
             }
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
         .aspectRatio(9.0 / 19.5, contentMode: .fit)
+    }
+
+    private func decorationView(_ deco: Decoration, in size: CGSize) -> some View {
+        let r = deco.frame.rect(in: size)
+        return AnimatedImageView(data: deco.imageData)
+            .frame(width: r.width, height: r.height)
+            .opacity(deco.opacity)
+            .position(x: r.midX, y: r.midY)
+            .allowsHitTesting(false)
     }
 }
