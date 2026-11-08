@@ -180,6 +180,8 @@ jobs:
             sleep 9
             if pgrep -f "Emu4ios.app/Emu4ios" > /dev/null; then result=running; else result=CRASHED; fi
             xcrun simctl io "$DEVICE" screenshot "shots/sys-$file.png"
+            # Slow-starting GPU consoles: a second, later picture.
+            case "$file" in *.n64|*.pbp) sleep 25; xcrun simctl io "$DEVICE" screenshot "shots/sys-$file-later.png" ;; esac
             echo "${file##*.},$file,$result" >> shots/systems.csv
           done
           cat shots/systems.csv
@@ -353,9 +355,12 @@ jobs:
           ls "$APP" "$APP/PlugIns" || true
           # Ad-hoc sign so the entitlements (App Group for the widget) travel with the app;
           # AltStore/SideStore replace the signature with your own when installing.
+          # Emulator cores first (inside out), then the widget, then the app.
+          for fw in "$APP"/Frameworks/*.framework; do codesign -f -s - "$fw"; done
           codesign -f -s - --entitlements Widget/Emu4iosWidget.entitlements "$APP/PlugIns/Emu4iosWidget.appex"
           codesign -f -s - --entitlements App/Emu4ios.entitlements "$APP"
           codesign -d --entitlements - "$APP" | head -20
+          codesign --verify --deep --strict "$APP" && echo "Signature OK"
           mkdir -p Payload && cp -R "$APP" Payload/
           zip -qry Emu4ios.ipa Payload
           ls -lh Emu4ios.ipa
