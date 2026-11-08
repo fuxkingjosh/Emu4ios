@@ -211,7 +211,18 @@ final class EmulationLoop: @unchecked Sendable {
                 return (w, _paused, _speed, _rewinding, _rewindEnabled, i, _turboButtons, k)
             }
             work.forEach { $0(core) }
-            keys.forEach { core.sendKey($0) }
+            // A key pressed and released between two frames would never be seen as held by cores that
+            // poll the keyboard, so a release of a key pressed this frame waits for the next frame.
+            var pressedNow = Set<UInt32>()
+            for (i, key) in keys.enumerated() {
+                if !key.down && pressedNow.contains(key.code) {
+                    let rest = Array(keys[i...])
+                    lock.withLock { _keys.insert(contentsOf: rest, at: 0) }
+                    break
+                }
+                if key.down { pressedNow.insert(key.code) }
+                core.sendKey(key)
+            }
 
             let now = CACurrentMediaTime()
             if isPaused {
