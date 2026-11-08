@@ -86,8 +86,7 @@ jobs:
           python3 Tests/make_ps1_test.py "$DATA/Documents/Games/E4 PS1 Demo.exe"
           shoot() { sleep "$2"; xcrun simctl io "$DEVICE" screenshot "shots/$1.png"; }
           stop() {
-            xcrun simctl terminate "$DEVICE" $BID 2>/dev/null || true
-            sleep 1
+            ( xcrun simctl terminate "$DEVICE" $BID 2>/dev/null & ); sleep 3
             pkill -9 -f "Emu4ios.app/Emu4ios" 2>/dev/null || true
             sleep 1
           }
@@ -102,8 +101,6 @@ jobs:
           done
           stop
           xcrun simctl spawn "$DEVICE" defaults write $BID activeThemeID builtin.midnight
-          xcrun simctl launch "$DEVICE" $BID -E4AutoPlay "E4 PS1 Demo.exe"; shoot "game-ps1" 8
-          stop
           xcrun simctl launch "$DEVICE" $BID -E4StartTab themes; shoot "themes" 6
           stop
           xcrun simctl launch "$DEVICE" $BID -E4OpenEditor gba; shoot "editor-gba" 6
@@ -113,6 +110,15 @@ jobs:
           xcrun simctl launch "$DEVICE" $BID -E4StartTab stats; shoot "stats" 5
           stop
           xcrun simctl launch "$DEVICE" $BID; shoot "library-after-play" 5
+          stop
+          # PlayStation last, with diagnostics if the app won't close afterwards.
+          xcrun simctl launch "$DEVICE" $BID -E4AutoPlay "E4 PS1 Demo.exe"; shoot "game-ps1" 8
+          PID=$(pgrep -f "Emu4ios.app/Emu4ios" | head -1)
+          echo "PS1 app pid: $PID"
+          sample "$PID" 3 -file shots/ps1-sample.txt || true
+          ( xcrun simctl terminate "$DEVICE" $BID & ); sleep 8
+          ps -o pid,stat,wchan,command -p "$PID" > shots/ps1-after-terminate.txt 2>&1 || true
+          sample "$PID" 3 -file shots/ps1-sample-after.txt || true
           ls -la shots
 
       - name: Publish screenshots to the ci-screenshots branch
