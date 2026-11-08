@@ -391,7 +391,7 @@ enum ButtonRenderer {
            let image = AnimatedImage.image(from: data) {
             // Picture buttons (previews/editor); the live controller animates them with image views.
             let still = image.images?.first ?? image
-            let fit = AVMakeRectWithAspectRatioInsideRect(still.size, r)
+            let fit = AVMakeRect(aspectRatio: still.size, insideRect: r)
             still.draw(in: fit)
             ctx.restoreGState()
             return
