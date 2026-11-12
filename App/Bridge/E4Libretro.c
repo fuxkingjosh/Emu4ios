@@ -3,6 +3,22 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <string.h>
+#include <errno.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+
+// The most recent problem a core (or the loader) reported, shown to the player when a game won't start.
+static char lastError[512];
+
+static void set_last_error(const char* fmt, ...) {
+    va_list ap; va_start(ap, fmt); vsnprintf(lastError, sizeof lastError, fmt, ap); va_end(ap);
+    size_t n = strlen(lastError);
+    while (n > 0 && (lastError[n - 1] == '\n' || lastError[n - 1] == '\r')) lastError[--n] = 0;
+}
+
+const char* e4lr_last_error(void) { return lastError; }
 
 /// Debug output for the Linux test harness (E4_LOG=1); silent in the app.
 static void e4lr_debug(const char* fmt, ...) {
@@ -56,6 +72,8 @@ struct E4Libretro {
     char saveDir[1024];
     char systemDir[1024];
     void* contentData;          // ROM bytes for cores that don't read files themselves
+    size_t contentSize;
+    bool contentMapped;         // true: mmap'd from the file (any size, no extra memory); false: malloc'd
     unsigned cheatIndex;
     bool loaded;
 };
@@ -211,7 +229,12 @@ static CoreAPI* load_core(const char* path) {
     }
     if (coreCount >= MAX_CORES) return NULL;
     void* h = dlopen(path, RTLD_NOW | RTLD_LOCAL);
-    if (!h) { e4lr_debug("dlopen failed: %s\n", dlerror()); return NULL; }
+    if (!h) {
+        const char* why = dlerror();
+        set_last_error("The emulator couldn't be opened: %s", why ? why : "unknown reason");
+        e4lr_debug("dlopen failed: %s\n", lastError);
+        return NULL;
+    }
     CoreAPI* c = &cores[coreCount];
     memset(c, 0, sizeof(*c));
     c->handle = h;
@@ -247,10 +270,14 @@ static CoreAPI* load_core(const char* path) {
 // MARK: - Callbacks
 
 static void log_cb(enum retro_log_level level, const char* fmt, ...) {
+    if (level >= RETRO_LOG_ERROR && fmt) {
+        va_list ap; va_start(ap, fmt); vsnprintf(lastError, sizeof lastError, fmt, ap); va_end(ap);
+        size_t n = strlen(lastError);
+        while (n > 0 && (lastError[n - 1] == '\n' || lastError[n - 1] == '\r')) lastError[--n] = 0;
+    }
 #ifndef __APPLE__
     if (getenv("E4_LOG")) { va_list ap; va_start(ap, fmt); vfprintf(stderr, fmt, ap); va_end(ap); }
 #endif
-    (void) level; (void) fmt;
 }
 
 static bool environment_cb(unsigned cmd, void* data) {
@@ -362,6 +389,9 @@ static bool environment_cb(unsigned cmd, void* data) {
         return true;
     case RETRO_ENVIRONMENT_SET_MESSAGE:
     case RETRO_ENVIRONMENT_SET_MESSAGE_EXT:
+        // Both message structs start with the text. Cores use this to explain why a game won't load.
+        if (data && *(const char* const*) data && (!lr || !lr->loaded)) set_last_error("%s", *(const char* const*) data);
+        return true;
     case RETRO_ENVIRONMENT_SET_ROTATION:
     case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY:
     case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_UPDATE_DISPLAY_CALLBACK:
@@ -524,8 +554,17 @@ void e4lr_flush_save(E4Libretro* lr) {
 
 // MARK: - Lifecycle
 
+static void release_content(E4Libretro* lr) {
+    if (!lr->contentData) return;
+    if (lr->contentMapped) munmap(lr->contentData, lr->contentSize); else free(lr->contentData);
+    lr->contentData = NULL;
+}
+
 E4Libretro* e4lr_create(const char* corePath, const char* contentPath, const char* savePath, const char* systemDir) {
-    if (current) { e4lr_debug("a game is already running\n"); return NULL; }
+    if (current) {
+        set_last_error("Another game is still closing. Go back and try again in a moment.");
+        return NULL;
+    }
     CoreAPI* core = load_core(corePath);
     if (!core) return NULL;
     api = core;
@@ -564,23 +603,43 @@ E4Libretro* e4lr_create(const char* corePath, const char* contentPath, const cha
     void* data = NULL;
     size_t dataSize = 0;
     if (!sys.need_fullpath) {
-        FILE* f = fopen(contentPath, "rb");
-        if (f) {
-            fseek(f, 0, SEEK_END);
-            long n = ftell(f);
-            fseek(f, 0, SEEK_SET);
-            if (n > 0 && n < 256 * 1024 * 1024) {
-                data = malloc((size_t) n);
-                dataSize = fread(data, 1, (size_t) n, f);
+        // Map the file instead of copying it: works for games of any size (DS games go up to 512 MB)
+        // and doesn't double the memory used. Private mapping, so the file itself is never changed.
+        int fd = open(contentPath, O_RDONLY);
+        if (fd < 0) {
+            set_last_error("The game file couldn't be opened (%s).", strerror(errno));
+        } else {
+            struct stat st;
+            if (fstat(fd, &st) == 0 && st.st_size > 0) {
+                void* map = mmap(NULL, (size_t) st.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+                if (map != MAP_FAILED) {
+                    data = map; dataSize = (size_t) st.st_size; lr->contentMapped = true;
+                } else if ((data = malloc((size_t) st.st_size)) != NULL) {
+                    ssize_t got = 0; size_t total = 0;
+                    while (total < (size_t) st.st_size && (got = read(fd, (char*) data + total, (size_t) st.st_size - total)) > 0) total += (size_t) got;
+                    dataSize = total;
+                } else {
+                    set_last_error("Not enough memory to open this game (%lld MB).", (long long) (st.st_size >> 20));
+                }
+            } else {
+                set_last_error("The game file is empty.");
             }
-            fclose(f);
+            close(fd);
+        }
+        if (!data) {
+            current = NULL;
+            free(lr);
+            return NULL;
         }
     }
     lr->contentData = data;
+    lr->contentSize = dataSize;
     struct retro_game_info info = { .path = contentPath, .data = data, .size = dataSize, .meta = NULL };
+    lastError[0] = 0;
     if (!api->load_game(&info)) {
         e4lr_debug("retro_load_game failed for %s\n", contentPath);
-        free(data);
+        if (!lastError[0]) set_last_error("The emulator didn't accept this file. It may be damaged, or made for a different console.");
+        release_content(lr);
         current = NULL;
         free(lr);
         return NULL;
@@ -597,8 +656,9 @@ E4Libretro* e4lr_create(const char* corePath, const char* contentPath, const cha
         if (!lr->gl) {
             api->unload_game();
             current = NULL;
-            free(lr->contentData);
+            release_content(lr);
             free(lr);
+            set_last_error("The graphics system couldn't start for this game.");
             return NULL;
         }
         if (lr->hw.context_reset) lr->hw.context_reset();
@@ -636,7 +696,7 @@ void e4lr_destroy(E4Libretro* lr) {
     if (current == lr) current = NULL;
     free(lr->video);
     free(lr->audio);
-    free(lr->contentData);
+    release_content(lr);
     free(lr);
 }
 

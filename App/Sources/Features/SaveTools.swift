@@ -41,7 +41,7 @@ enum SaveTools {
         let scoped = source.startAccessingSecurityScopedResource()
         defer { if scoped { source.stopAccessingSecurityScopedResource() } }
         let data = try Data(contentsOf: source)
-        guard !data.isEmpty, data.count <= 2_000_000 else { throw CocoaError(.fileReadCorruptFile) }
+        guard !data.isEmpty, data.count <= 160_000_000 else { throw CocoaError(.fileReadCorruptFile) }
         try backup(game)
         try data.write(to: saveURL(for: game), options: .atomic)
         CloudSync.shared.didChangeFile(saveURL(for: game), kind: .save)

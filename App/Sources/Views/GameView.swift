@@ -20,7 +20,8 @@ struct GameContainerView: View {
                     Image(systemName: "exclamationmark.triangle.fill").font(.largeTitle).foregroundStyle(.yellow)
                     Text("This game couldn't be loaded").font(.title3.bold()).foregroundStyle(.white)
                     Text(problem ?? "The file may be damaged or not a supported game.")
-                        .foregroundStyle(.gray).multilineTextAlignment(.center)
+                        .font(.footnote).foregroundStyle(.gray).multilineTextAlignment(.center)
+                        .textSelection(.enabled)
                     Button("Back to Library") { router.playing = nil }.buttonStyle(.borderedProminent)
                 }
                 .padding()
@@ -41,6 +42,17 @@ struct GameContainerView: View {
                 s.start(resumeAutoSave: resume)
                 LiveActivityController.shared.begin(game: game, accentHex: themes.theme(for: game).style.accent.hex)
             } else {
+                // Say why, so a failed game can actually be diagnosed.
+                var lines: [String] = []
+                let reason = game.system.usesLibretro ? String(cString: e4lr_last_error()) : ""
+                lines.append(reason.isEmpty ? "The file may be damaged or not a supported game." : reason)
+                let url = library.romURL(for: game)
+                if let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value {
+                    lines.append("\(game.system.shortName) · \(url.lastPathComponent) · \(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))")
+                } else {
+                    lines.append("The game file is missing from the Games folder: \(url.lastPathComponent)")
+                }
+                problem = lines.joined(separator: "\n\n")
                 failed = true
             }
         }

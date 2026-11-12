@@ -20,6 +20,8 @@ typedef struct E4Libretro E4Libretro;
 /// `corePath`: the core's binary inside the app (Frameworks/<Core>.framework/<Core>).
 /// `savePath`: memory card / battery file. `systemDir`: where BIOS files may be placed.
 E4Libretro* e4lr_create(const char* corePath, const char* contentPath, const char* savePath, const char* systemDir);
+/// Why the last e4lr_create returned NULL (empty if there's nothing to report).
+const char* e4lr_last_error(void);
 void e4lr_destroy(E4Libretro* lr);
 
 void e4lr_video_size(const E4Libretro* lr, unsigned* width, unsigned* height);

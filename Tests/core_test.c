@@ -17,7 +17,7 @@ int main(int argc, char** argv) {
         }
     }
     E4Libretro* lr = e4lr_create(argv[1], argv[2], "/tmp/core_test.srm", "/tmp");
-    if (!lr) { puts("LOAD FAILED"); return 1; }
+    if (!lr) { printf("LOAD FAILED: %s\n", e4lr_last_error()); return 1; }
     char name[96]; e4lr_core_name(name, sizeof name);
     int16_t audio[16384]; size_t total = 0;
     for (int i = 0; i < frames; i++) {

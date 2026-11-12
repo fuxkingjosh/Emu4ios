@@ -182,6 +182,7 @@ final class EmulationLoop: @unchecked Sendable {
         audio.start()
         let t = Thread { [weak self] in self?.run() }
         t.qualityOfService = .userInteractive
+        t.stackSize = 16 << 20 // emulators expect a desktop-sized stack; iOS gives new threads only 512 KB
         t.name = "Emu4ios.emulation"
         thread = t
         t.start()
