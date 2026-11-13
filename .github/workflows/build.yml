@@ -171,11 +171,14 @@ jobs:
           # Free homebrew test programs for the GPU consoles (used only here, never shipped).
           curl -fsSL -o roms/mandelbrot.n64 "https://raw.githubusercontent.com/PeterLemon/N64/master/CP1/Fractal/32BPP/320X240/Mandelbrot/Single/Mandelbrot32BPP320X240.N64" || true
           curl -fsSL -o roms/blend.pbp "https://raw.githubusercontent.com/hrydgard/pspautotests/master/demos/blend.pbp" || true
+          curl -fsSL -o roms/skinning.pbp "https://raw.githubusercontent.com/hrydgard/pspautotests/master/demos/skinning.pbp" || true
           # Real DS homebrew (the DS emulator's own test program), plus a copy padded to 256 MB:
           # big DS games must load too.
           curl -fsSL -o roms/homebrew.nds "https://raw.githubusercontent.com/JesseTG/melonds-ds/f394adbacb5722ee97c1b37c8064da9a25818310/test/nds/micrecord.nds" \
             && python3 -c "d=open('roms/homebrew.nds','rb').read(); open('roms/big256.nds','wb').write(d+bytes(268435456-len(d)))" || true
           cp roms/* "$DATA/Documents/Games/"
+          # Test every console, including the experimental ones.
+          xcrun simctl spawn "$DEVICE" defaults write $BID showExperimentalConsoles -bool YES
           echo "system,file,result" > shots/systems.csv
           for f in roms/*; do
             file=$(basename "$f")

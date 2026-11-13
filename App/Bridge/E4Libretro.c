@@ -30,7 +30,13 @@ static void e4lr_debug(const char* fmt, ...) {
 #endif
 }
 #include "libretro.h"
-#ifdef __APPLE__
+// GPU cores (N64, PSP): EAGL on iPhone, EGL in the Linux test harness.
+#if defined(__APPLE__) || defined(E4_EGL)
+#define E4_HAS_GL 1
+#else
+#define E4_HAS_GL 0
+#endif
+#if E4_HAS_GL
 #include "E4GL.h"
 #endif
 
@@ -63,7 +69,7 @@ struct E4Libretro {
     retro_keyboard_event_t keyboardCallback;
     struct retro_hw_render_callback hw;
     bool usesHW;
-#ifdef __APPLE__
+#if E4_HAS_GL
     E4GL* gl;
 #endif
     struct retro_memory_descriptor* memoryMap;
@@ -158,7 +164,7 @@ static void declare_variables(const struct retro_variable* vars) {
     }
 }
 
-#ifdef __APPLE__
+#if E4_HAS_GL
 static uintptr_t hw_get_framebuffer(void) { return current && current->gl ? e4gl_framebuffer(current->gl) : 0; }
 static retro_proc_address_t hw_get_proc(const char* sym) { return (retro_proc_address_t) e4gl_proc_address(sym); }
 #endif
@@ -325,7 +331,7 @@ static bool environment_cb(unsigned cmd, void* data) {
         }
         return true;
     case RETRO_ENVIRONMENT_SET_HW_RENDER: {
-#ifdef __APPLE__
+#if E4_HAS_GL
         struct retro_hw_render_callback* cb = data;
         if (!lr || !cb) return false;
         if (cb->context_type != RETRO_HW_CONTEXT_OPENGLES2 && cb->context_type != RETRO_HW_CONTEXT_OPENGLES3 &&
@@ -427,7 +433,7 @@ static void ensure_video(E4Libretro* lr, unsigned w, unsigned h) {
 
 static void video_cb(const void* data, unsigned width, unsigned height, size_t pitch) {
     E4Libretro* lr = current;
-#ifdef __APPLE__
+#if E4_HAS_GL
     if (lr && data == RETRO_HW_FRAME_BUFFER_VALID && lr->gl && width && height) {
         ensure_video(lr, width, height);
         e4gl_read(lr->gl, width, height, lr->hw.bottom_left_origin, lr->video);
@@ -647,12 +653,14 @@ E4Libretro* e4lr_create(const char* corePath, const char* contentPath, const cha
     lr->loaded = true;
     api->set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
     api->get_system_av_info(&lr->av);
-#ifdef __APPLE__
+#if E4_HAS_GL
     if (lr->usesHW) {
         unsigned mw = lr->av.geometry.max_width ? lr->av.geometry.max_width : 1024;
         unsigned mh = lr->av.geometry.max_height ? lr->av.geometry.max_height : 1024;
-        bool gles3 = lr->hw.context_type != RETRO_HW_CONTEXT_OPENGLES2;
-        lr->gl = e4gl_create(gles3, mw, mh, lr->hw.depth, lr->hw.stencil);
+        // Always ES 3 when the device has it, like RetroArch and PPSSPP's own app. Cores that ask for
+        // "ES 2" still work on ES 3, and get the newer features (PSP games need them to draw characters).
+        bool gles3 = true;
+        lr->gl = e4gl_create(gles3, mw, mh, true, true); // depth + stencil always: costs little, avoids missing geometry
         if (!lr->gl) {
             api->unload_game();
             current = NULL;
@@ -677,11 +685,14 @@ void e4lr_destroy(E4Libretro* lr) {
     if (!lr) return;
     e4lr_flush_save(lr);
     enter(lr);
-#ifdef __APPLE__
-    if (lr->gl && lr->hw.context_destroy) lr->hw.context_destroy();
+    // PPSSPP shuts its own graphics down inside retro_unload_game (and may still be booting, needing
+    // them), so it must not get context_destroy first or after. Other GPU cores get it before unloading.
+    bool selfCleaning = strstr(api->path, "PPSSPP") || strstr(api->path, "ppsspp");
+#if E4_HAS_GL
+    if (lr->gl && lr->hw.context_destroy && !selfCleaning) lr->hw.context_destroy();
 #endif
     if (lr->loaded) api->unload_game();
-#ifdef __APPLE__
+#if E4_HAS_GL
     if (lr->gl) e4gl_destroy(lr->gl);
 #endif
     free(lr->memoryMap);
@@ -755,7 +766,7 @@ uint8_t* e4lr_memory(unsigned id, size_t* size) {
 /// Every call into the core goes through here: callbacks need `current`, GPU cores need their GL context.
 static void enter(E4Libretro* lr) {
     current = lr;
-#ifdef __APPLE__
+#if E4_HAS_GL
     if (lr && lr->gl) e4gl_make_current(lr->gl);
 #endif
 }
@@ -763,7 +774,7 @@ static void enter(E4Libretro* lr) {
 /// After a call made from another thread (save states, cheats…), let go of the GL context so only
 /// one thread ever has it current.
 static void leave(E4Libretro* lr) {
-#ifdef __APPLE__
+#if E4_HAS_GL
     if (lr && lr->gl) e4gl_release_current();
 #else
     (void) lr;
